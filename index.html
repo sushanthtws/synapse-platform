@@ -5,42 +5,53 @@
 <title>Synapse — Skill Intelligence</title>
 
 <style>
-body {
-    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-    background: #f6f8fa;
-    margin: 0;
-}
+body { font-family: sans-serif; margin:0; background:#f6f8fa; }
 
-/* HEADER */
 .header {
-    background: white;
-    padding: 12px 20px;
-    border-bottom: 1px solid #ddd;
+    background:white;
+    padding:12px 20px;
     display:flex;
-    justify-content: space-between;
+    justify-content:space-between;
+    border-bottom:1px solid #ddd;
 }
-.logo { font-weight: 700; }
 
-/* HERO */
 .hero {
-    background: linear-gradient(135deg,#0a1628,#0f2a52);
-    color: white;
-    padding: 20px;
+    background:#0f2a52;
+    color:white;
+    padding:20px;
 }
 
-/* FILTERS */
+.search-bar {
+    width:100%;
+    padding:10px;
+    margin-top:10px;
+    border-radius:6px;
+    border:none;
+}
+
 .filters {
     background:white;
-    padding:10px;
+    padding:15px;
     border-bottom:1px solid #ddd;
+}
+
+.filter-group {
+    margin-bottom:10px;
+}
+
+.filter-title {
+    font-size:12px;
+    font-weight:700;
+    margin-bottom:6px;
+    color:#555;
 }
 
 .chip {
     display:inline-block;
-    padding:6px 10px;
+    padding:5px 10px;
     border:1px solid #ddd;
     border-radius:20px;
-    margin:4px;
+    margin:3px;
     cursor:pointer;
     font-size:12px;
 }
@@ -50,65 +61,45 @@ body {
     color:white;
 }
 
-/* GRID */
 .grid {
     padding:20px;
     display:grid;
-    grid-template-columns:repeat(auto-fill,minmax(340px,1fr));
+    grid-template-columns:repeat(auto-fill,minmax(320px,1fr));
     gap:16px;
 }
 
-/* CARD */
 .card {
     background:white;
-    padding:16px;
+    padding:15px;
     border-radius:8px;
     border:1px solid #ddd;
 }
 
-.title { font-weight:600; color:#0969da; }
-.summary { font-size:13px; color:#555; margin:8px 0; }
+.title { color:#0969da; font-weight:600; }
+.summary { font-size:13px; color:#555; }
 
-.tags span {
-    font-size:11px;
-    background:#eee;
-    padding:4px 8px;
-    border-radius:8px;
-    margin:2px;
-    display:inline-block;
-}
+.meta { font-size:11px; color:#666; margin-top:6px; }
 
-.meta {
-    font-size:11px;
-    color:#666;
-    margin-top:6px;
-}
 </style>
 </head>
 
 <body>
 
-<!-- HEADER -->
 <div class="header">
-    <div class="logo">⚡ Synapse</div>
-
-    <!-- UPLOAD BACK (IMPORTANT) -->
+    <div>⚡ Synapse</div>
     <div>
         <input type="file" id="file" style="display:none">
-        <button onclick="document.getElementById('file').click()">+ Upload</button>
+        <button onclick="file.click()">+ Upload</button>
     </div>
 </div>
 
-<!-- HERO -->
 <div class="hero">
-    <h2>Skill Intelligence Grid</h2>
-    <p>AI-extracted reusable skills with domain + tech classification</p>
+    <h2>Skill Intelligence</h2>
+    <input id="search" class="search-bar" placeholder="Search skills (e.g. 'optimize API latency with python')">
 </div>
 
-<!-- FILTERS -->
 <div class="filters" id="filters"></div>
 
-<!-- GRID -->
 <div class="grid" id="grid"></div>
 
 <script>
@@ -116,9 +107,16 @@ body {
 const API = "https://synapse-platform.onrender.com";
 
 let ALL = [];
-let ACTIVE = new Set();
+let ACTIVE = {
+    domain: new Set(),
+    usage: new Set(),
+    tools: new Set(),
+    languages: new Set(),
+    tech_stack: new Set(),
+    difficulty: new Set()
+};
 
-/* LOAD */
+/* ---------------- LOAD ---------------- */
 async function load() {
     const res = await fetch(`${API}/skills`);
     ALL = await res.json();
@@ -126,56 +124,117 @@ async function load() {
     render();
 }
 
-/* BUILD FILTERS (DYNAMIC FROM DATA) */
+/* ---------------- BUILD FILTER GROUPS ---------------- */
 function buildFilters() {
-    const f = document.getElementById("filters");
 
-    let values = new Set();
+    const buckets = {
+        domain: new Set(),
+        usage: new Set(),
+        tools: new Set(),
+        languages: new Set(),
+        tech_stack: new Set(),
+        difficulty: new Set()
+    };
 
     ALL.forEach(s => {
-        if (s.domain) values.add(s.domain);
-        (s.tools || []).forEach(t => values.add(t));
-        (s.languages || []).forEach(l => values.add(l));
-        (s.tech_stack || []).forEach(t => values.add(t));
+        if (s.domain) buckets.domain.add(s.domain);
+        if (s.usage) buckets.usage.add(s.usage);
+        if (s.difficulty) buckets.difficulty.add(s.difficulty);
+
+        (s.tools || []).forEach(v => buckets.tools.add(v));
+        (s.languages || []).forEach(v => buckets.languages.add(v));
+        (s.tech_stack || []).forEach(v => buckets.tech_stack.add(v));
     });
 
-    f.innerHTML = [...values].map(v =>
-        `<span class="chip" onclick="toggle('${v}', this)">${v}</span>`
-    ).join("");
+    const container = document.getElementById("filters");
+
+    container.innerHTML = Object.keys(buckets).map(group => `
+        <div class="filter-group">
+            <div class="filter-title">${group.toUpperCase()}</div>
+            ${
+                [...buckets[group]].map(v =>
+                    `<span class="chip" onclick="toggle('${group}','${v}',this)">${v}</span>`
+                ).join("")
+            }
+        </div>
+    `).join("");
 }
 
-/* TOGGLE FILTER */
-function toggle(val, el) {
-    if (ACTIVE.has(val)) {
-        ACTIVE.delete(val);
+/* ---------------- TOGGLE ---------------- */
+function toggle(group, value, el) {
+
+    const set = ACTIVE[group];
+
+    if (set.has(value)) {
+        set.delete(value);
         el.classList.remove("active");
     } else {
-        ACTIVE.add(val);
+        set.add(value);
         el.classList.add("active");
     }
+
     render();
 }
 
-/* FILTER LOGIC */
-function match(skill) {
-    if (ACTIVE.size === 0) return true;
+/* ---------------- NLP SEARCH ---------------- */
+function score(skill, query) {
 
-    const fields = [
-        skill.domain,
-        ...(skill.tools || []),
-        ...(skill.languages || []),
-        ...(skill.tech_stack || [])
-    ];
+    if (!query) return 1;
 
-    return [...ACTIVE].every(f => fields.includes(f));
+    const q = query.toLowerCase().split(" ");
+
+    let text = `
+        ${skill.title}
+        ${skill.summary}
+        ${(skill.tags || []).join(" ")}
+        ${(skill.tools || []).join(" ")}
+        ${(skill.languages || []).join(" ")}
+        ${(skill.tech_stack || []).join(" ")}
+        ${skill.domain}
+        ${skill.usage}
+    `.toLowerCase();
+
+    let score = 0;
+
+    q.forEach(word => {
+        if (skill.title.toLowerCase().includes(word)) score += 5;
+        if (skill.summary.toLowerCase().includes(word)) score += 3;
+        if (text.includes(word)) score += 1;
+    });
+
+    return score;
 }
 
-/* RENDER */
+/* ---------------- FILTER MATCH ---------------- */
+function match(skill) {
+
+    for (let key in ACTIVE) {
+        const set = ACTIVE[key];
+        if (set.size === 0) continue;
+
+        let values = [];
+
+        if (Array.isArray(skill[key])) values = skill[key];
+        else values = [skill[key]];
+
+        if (![...set].every(v => values.includes(v))) return false;
+    }
+
+    return true;
+}
+
+/* ---------------- RENDER ---------------- */
 function render() {
 
-    const grid = document.getElementById("grid");
+    const query = document.getElementById("search").value;
 
-    const data = ALL.filter(match);
+    let data = ALL
+        .filter(match)
+        .map(s => ({...s, _score: score(s, query)}))
+        .filter(s => s._score > 0)
+        .sort((a,b) => b._score - a._score);
+
+    const grid = document.getElementById("grid");
 
     grid.innerHTML = data.map(s => `
         <div class="card">
@@ -184,30 +243,28 @@ function render() {
 
             <div class="summary">${s.summary}</div>
 
-            <div class="tags">
-                ${(s.tags || []).map(t => `<span>${t}</span>`).join("")}
+            <div class="meta">
+                ${s.domain} | ${s.usage} | ${s.difficulty}
             </div>
 
             <div class="meta">
-                <b>Domain:</b> ${s.domain || "-"}<br>
-                <b>Usage:</b> ${s.usage || "-"}<br>
-                <b>Difficulty:</b> ${s.difficulty}
+                ${(s.tech_stack || []).join(", ")}
             </div>
 
             <div class="meta">
-                <b>Tech:</b> ${(s.tech_stack || []).join(", ")}
-            </div>
-
-            <div class="meta">
-                <b>Lang:</b> ${(s.languages || []).join(", ")}
+                ${(s.languages || []).join(", ")}
             </div>
 
         </div>
     `).join("");
 }
 
-/* UPLOAD */
-document.getElementById("file").addEventListener("change", async (e) => {
+/* ---------------- EVENTS ---------------- */
+document.getElementById("search")
+    .addEventListener("input", render);
+
+document.getElementById("file")
+.addEventListener("change", async (e) => {
 
     const file = e.target.files[0];
     if (!file) return;
@@ -216,8 +273,8 @@ document.getElementById("file").addEventListener("change", async (e) => {
     fd.append("file", file);
 
     const res = await fetch(`${API}/process-skill`, {
-        method: "POST",
-        body: fd
+        method:"POST",
+        body:fd
     });
 
     const skill = await res.json();
