@@ -1,26 +1,28 @@
 import re
 
+def clean_text(text):
+    # remove code blocks completely
+    text = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
+
+    # remove markdown symbols
+    text = re.sub(r"[#*_>`-]", "", text)
+
+    # collapse whitespace
+    text = re.sub(r"\s+", " ", text).strip()
+
+    return text
+
+
 def extract_skill(text, post):
-    """
-    Converts messy markdown into structured skill object
-    """
 
-    # Clean text
-    clean_text = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
+    safe_text = clean_text(text)
 
-    # Extract key points (simple heuristic)
-    sentences = [s.strip() for s in clean_text.split("\n") if len(s.strip()) > 20]
-
-    key_points = sentences[:4]  # limit UI overload
-
-    tags = post.get("allowed-tools", [])
-    if not isinstance(tags, list):
-        tags = [str(tags)]
+    sentences = [s.strip() for s in safe_text.split(".") if len(s.strip()) > 20]
 
     return {
         "title": post.get("name", "Untitled Skill"),
-        "description": post.get("description", clean_text[:180]),
-        "tags": tags[:5],  # limit tags
-        "key_points": key_points,
+        "description": safe_text[:140],   # 👈 HARD LIMIT
+        "tags": (post.get("allowed-tools", []) or [])[:5],
+        "key_points": sentences[:4],      # 👈 ALWAYS ARRAY
         "difficulty": "medium"
     }

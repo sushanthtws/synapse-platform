@@ -97,14 +97,20 @@
     // ---------------------------
     // RENDER CARD
     // ---------------------------
-    function renderCard(skill) {
+   function renderCard(skill) {
+
+    const safe = (text) =>
+        String(text || "")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;");
 
     const tags = (skill.tags || []).map(t =>
-        `<span class="tag">${t}</span>`
+        `<span class="tag">${safe(t)}</span>`
     ).join('');
 
     const points = (skill.key_points || [])
-        .map(p => `<li>${p}</li>`)
+        .slice(0, 4)
+        .map(p => `<li>${safe(p)}</li>`)
         .join('');
 
     const cardHtml = `
@@ -113,21 +119,28 @@
 
             <div class="card-header">
                 <div class="card-icon">📄</div>
+
                 <div class="card-header-text">
-                    <div class="card-name">${skill.title}</div>
-                    <div class="card-byline">Difficulty: ${skill.difficulty}</div>
+                    <div class="card-name">${safe(skill.title)}</div>
+                    <div class="card-byline">Difficulty: ${safe(skill.difficulty)}</div>
                 </div>
             </div>
 
-            <div class="card-desc">${skill.description}</div>
+            <div class="card-desc">
+                ${safe(skill.description)}
+            </div>
 
-            <ul class="card-points">${points}</ul>
+            <ul class="card-points">
+                ${points}
+            </ul>
 
-            <div class="card-tags">${tags}</div>
+            <div class="card-tags">
+                ${tags}
+            </div>
 
             <div class="card-footer">
                 <button class="btn-secondary"
-                    onclick="downloadMD('${skill.title}', \`${skill.raw_content}\`)">
+                    onclick="downloadMD('${safe(skill.title)}', \`${skill.raw_content || ""}\`)">
                     Download MD
                 </button>
             </div>
