@@ -28,21 +28,34 @@ def skills():
 
 @app.post("/process-skill")
 async def process_skill(file: UploadFile = File(...)):
-    content = await file.read()
-    text = content.decode("utf-8")
+    try:
+        content = await file.read()
+        text = content.decode("utf-8")
 
-    post = frontmatter.loads(text)
+        post = frontmatter.loads(text)
 
-    # 🧠 AGENT STEP (IMPORTANT)
-    skill = extract_skill(text, post)
+        tags = post.get("allowed-tools", [])
+        if not isinstance(tags, list):
+            tags = [str(tags)]
 
-    # attach raw only for download, NOT UI
-    skill["raw_content"] = text
+        skill = {
+            "title": post.get("name", "Untitled Skill"),
+            "description": post.get("description", "No description provided"),
+            "tags": tags,
+            "model": post.get("model", "N/A"),
+            "effort": post.get("effort", "N/A"),
+            "raw_content": text
+        }
 
-    insert_skill(skill)
+        insert_skill(skill)
 
-    return skill
+        return skill
 
+    except Exception as e:
+        return {
+            "error": "processing_failed",
+            "message": str(e)
+        }
 @app.delete("/reset-db")
 def reset_db():
     try:
