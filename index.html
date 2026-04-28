@@ -2,40 +2,43 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Synapse - Knowledge Platform</title>
+<title>Synapse Graph</title>
 <link rel="stylesheet" href="style.css">
 
 <style>
-/* ---------------- TOP BAR ---------------- */
-.top-bar {
+.graph {
     display: flex;
+    flex-wrap: wrap;
     gap: 12px;
-    margin-bottom: 20px;
 }
 
-.search-input {
-    flex: 1;
-    padding: 10px;
+.node {
+    padding: 12px;
+    border-radius: 10px;
     border: 1px solid #ddd;
-    border-radius: 6px;
+    background: white;
+    cursor: pointer;
+    width: 260px;
+    transition: 0.2s;
 }
 
-.filter {
-    padding: 10px;
-    border-radius: 6px;
-    border: 1px solid #ddd;
+.node:hover {
+    transform: scale(1.02);
+    border-color: #0969da;
 }
 
-/* ---------------- CARD POINTS ---------------- */
-.card-points {
-    margin: 10px 0;
-    padding-left: 18px;
-    color: #57606a;
-    font-size: 13px;
+.node.active {
+    border: 2px solid #0969da;
+    box-shadow: 0 0 10px #0969da33;
 }
 
-.card-points li {
-    margin-bottom: 4px;
+.badge {
+    font-size: 10px;
+    background: #f0f7ff;
+    padding: 2px 6px;
+    border-radius: 8px;
+    margin-right: 4px;
+    display: inline-block;
 }
 </style>
 </head>
@@ -44,223 +47,115 @@
 
 <header class="header">
     <div class="header-content">
-        <a href="index.html" class="logo">⚡ Synapse</a>
-        <nav class="nav-tabs">
-            <a href="#" class="nav-tab active">Explore & Ingest</a>
-        </nav>
+        <a href="#" class="logo">⚡ Synapse Graph</a>
     </div>
 </header>
 
-<div class="main-wrapper">
+<main class="content-area">
 
-    <!-- SIDEBAR -->
-    <aside class="sidebar">
+    <div class="section-title">Skill Knowledge Graph</div>
 
-        <div class="sidebar-section">
-            <div class="sidebar-section-title">📤 Ingest Skill</div>
+    <input id="searchBox" class="search-input" placeholder="Search skills...">
 
-            <input type="file" id="skillFile" accept=".md" style="display:none">
+    <div id="graph" class="graph"></div>
 
-            <button class="sidebar-apply-btn"
-                onclick="document.getElementById('skillFile').click()">
-                + Upload Skill.md
-            </button>
-        </div>
-
-        <div class="sidebar-section">
-            <div class="sidebar-section-title">📁 Industry</div>
-            <div style="font-size: 13px; color: var(--color-text-secondary);">
-                Real Estate (Default)
-            </div>
-        </div>
-
-    </aside>
-
-    <!-- MAIN -->
-    <main class="content-area">
-
-        <div class="section-title">🥇 Skill Knowledge Grid</div>
-
-        <!-- SEARCH + FILTER -->
-        <div class="top-bar">
-            <input id="searchBox"
-                   class="search-input"
-                   placeholder="Search skills...">
-
-            <select id="difficultyFilter" class="filter">
-                <option value="all">All Levels</option>
-                <option value="easy">Easy</option>
-                <option value="medium">Medium</option>
-                <option value="hard">Hard</option>
-            </select>
-        </div>
-
-        <!-- GRID -->
-        <div class="project-grid" id="projectGrid"></div>
-
-    </main>
-
-</div>
+</main>
 
 <script>
 
-/* ---------------- CONFIG ---------------- */
 const API_BASE = "https://synapse-platform.onrender.com";
 
-/* ---------------- STATE ---------------- */
-let ALL_SKILLS = [];
-const grid = document.getElementById("projectGrid");
+let SKILLS = [];
+let selected = null;
 
-/* ---------------- SAFE TEXT ---------------- */
-function safe(text) {
-    return String(text || "")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll("`", "'");
+/* ---------------- LOAD ---------------- */
+async function load() {
+    const res = await fetch(`${API_BASE}/skills`);
+    SKILLS = await res.json();
+    render(SKILLS);
 }
 
-/* ---------------- LOAD SKILLS ---------------- */
-async function loadSkills() {
-    try {
-        const res = await fetch(`${API_BASE}/skills`);
-        ALL_SKILLS = await res.json();
-        renderAll(ALL_SKILLS);
-    } catch (err) {
-        console.error("Failed to load skills:", err);
-    }
+/* ---------------- RELATION ENGINE ---------------- */
+function related(a, b) {
+
+    if (!a || !b) return false;
+
+    return (
+        a.skill_type === b.skill_type ||
+        a.domain === b.domain ||
+        overlap(a.tool_tags, b.tool_tags) ||
+        overlap(a.tech_tags, b.tech_tags)
+    );
 }
 
-/* ---------------- RENDER ALL ---------------- */
-function renderAll(skills) {
-    grid.innerHTML = "";
-    skills.forEach(renderCard);
+function overlap(arr1 = [], arr2 = []) {
+    return arr1.some(x => arr2.includes(x));
 }
 
-/* ---------------- FILTER ---------------- */
-function applyFilters() {
+/* ---------------- RENDER ---------------- */
+function render(list) {
 
-    const query = document.getElementById("searchBox").value.toLowerCase();
-    const difficulty = document.getElementById("difficultyFilter").value;
+    const graph = document.getElementById("graph");
+    graph.innerHTML = "";
 
-    let filtered = ALL_SKILLS;
+    list.forEach(s => {
 
-    if (difficulty !== "all") {
-        filtered = filtered.filter(s => s.difficulty === difficulty);
-    }
+        const node = document.createElement("div");
+        node.className = "node";
 
-    if (query) {
-        filtered = filtered.filter(s =>
-            (s.title || "").toLowerCase().includes(query) ||
-            (s.summary || "").toLowerCase().includes(query) ||
-            (s.tags || []).join(" ").toLowerCase().includes(query)
-        );
-    }
+        node.innerHTML = `
+            <div><b>${s.title}</b></div>
+            <div style="font-size:12px;color:#666;margin-top:6px;">
+                ${s.summary}
+            </div>
 
-    renderAll(filtered);
+            <div style="margin-top:8px;">
+                <span class="badge">${s.skill_type}</span>
+                <span class="badge">${s.domain}</span>
+            </div>
+        `;
+
+        node.onclick = () => highlight(s);
+
+        graph.appendChild(node);
+    });
 }
 
-/* ---------------- UPLOAD ---------------- */
-document.getElementById("skillFile")
-.addEventListener("change", async (e) => {
+/* ---------------- HIGHLIGHT RELATIONS ---------------- */
+function highlight(skill) {
 
-    const file = e.target.files[0];
-    if (!file) return;
+    selected = skill;
 
-    const formData = new FormData();
-    formData.append("file", file);
+    document.querySelectorAll(".node").forEach((el, i) => {
 
-    try {
-        const res = await fetch(`${API_BASE}/process-skill`, {
-            method: "POST",
-            body: formData
-        });
+        const other = SKILLS[i];
 
-        const skill = await res.json();
+        if (other.title === skill.title) {
+            el.classList.add("active");
+        } else if (related(skill, other)) {
+            el.classList.add("active");
+        } else {
+            el.classList.remove("active");
+        }
+    });
+}
 
-        ALL_SKILLS.unshift(skill);
-        renderAll(ALL_SKILLS);
+/* ---------------- SEARCH ---------------- */
+document.getElementById("searchBox").addEventListener("input", (e) => {
 
-    } catch (err) {
-        console.error(err);
-        alert("Upload failed");
-    }
+    const q = e.target.value.toLowerCase();
+
+    const filtered = SKILLS.filter(s =>
+        s.title.toLowerCase().includes(q) ||
+        s.summary.toLowerCase().includes(q) ||
+        (s.intent_tags || []).join(" ").toLowerCase().includes(q)
+    );
+
+    render(filtered);
 });
 
-/* ---------------- CARD RENDER ---------------- */
-function renderCard(skill) {
-
-    const tags = (skill.tags || [])
-        .slice(0, 5)
-        .map(t => `<span class="tag">${safe(t)}</span>`)
-        .join('');
-
-    const points = (skill.key_points || [])
-        .slice(0, 4)
-        .map(p => `<li>${safe(p)}</li>`)
-        .join('');
-
-    const cardHtml = `
-        <div class="project-card">
-
-            <div class="rank-badge">
-                ${safe(skill.difficulty || "medium")}
-            </div>
-
-            <div class="card-header">
-                <div class="card-icon">📄</div>
-
-                <div class="card-header-text">
-                    <div class="card-name">
-                        ${safe(skill.title)}
-                    </div>
-                </div>
-            </div>
-
-            <div class="card-desc">
-                ${safe(skill.summary)}
-            </div>
-
-            <ul class="card-points">
-                ${points}
-            </ul>
-
-            <div class="card-tags">
-                ${tags}
-            </div>
-
-            <div class="card-footer">
-                <button class="btn-secondary"
-                    onclick="downloadMD('${safe(skill.title)}', JSON.stringify(skill, null, 2))">
-                    Download JSON
-                </button>
-            </div>
-
-        </div>
-    `;
-
-    grid.insertAdjacentHTML("afterbegin", cardHtml);
-}
-
-/* ---------------- DOWNLOAD ---------------- */
-function downloadMD(name, content) {
-    const blob = new Blob([content], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${name}.json`;
-    a.click();
-}
-
-/* ---------------- EVENTS ---------------- */
-document.getElementById("searchBox")
-    .addEventListener("input", applyFilters);
-
-document.getElementById("difficultyFilter")
-    .addEventListener("change", applyFilters);
-
 /* ---------------- INIT ---------------- */
-loadSkills();
+load();
 
 </script>
 
