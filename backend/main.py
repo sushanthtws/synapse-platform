@@ -15,7 +15,9 @@ app.add_middleware(
 )
 
 # init DB on startup
-init_db()
+@app.on_event("startup")
+def startup():
+    init_db()
 
 @app.get("/")
 def home():
