@@ -74,7 +74,7 @@ def generate_readme(skill):
 {", ".join(skill.get("languages", []))}
 
 ## 🔑 Key Points
-{"".join([f"- {kp}\n" for kp in skill.get("key_points", [])])}
+{chr(10).join([f"- {kp}" for kp in skill.get("key_points", [])])}
 """
 
 
