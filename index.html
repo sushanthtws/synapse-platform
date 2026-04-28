@@ -160,15 +160,30 @@ const API = "https://synapse-platform.onrender.com";
 
 let SKILLS = [];
 
-/* LOAD */
-async function load() {
-    const res = await fetch(`${API}/skills`);
-    SKILLS = await res.json();
-    buildFilters();
-    render(SKILLS);
+/* ---------------- SAFE ARRAY ---------------- */
+function arr(x) {
+    if (!x) return [];
+    if (Array.isArray(x)) return x;
+    return [x];
 }
 
-/* FILTER BUILD */
+/* ---------------- LOAD ---------------- */
+async function load() {
+    try {
+        const res = await fetch(`${API}/skills`);
+        SKILLS = await res.json();
+
+        console.log("Loaded skills:", SKILLS);
+
+        buildFilters();
+        render(SKILLS);
+
+    } catch (err) {
+        console.error("Load failed", err);
+    }
+}
+
+/* ---------------- BUILD FILTERS ---------------- */
 function buildFilters() {
     build("domainFilter","domain");
     build("usageFilter","usage");
@@ -182,7 +197,7 @@ function build(id, field) {
     const values = new Set();
 
     SKILLS.forEach(s => {
-        (s[field] || []).forEach(v => values.add(v));
+        arr(s[field]).forEach(v => values.add(v));
     });
 
     el.innerHTML =
@@ -190,22 +205,23 @@ function build(id, field) {
         [...values].map(v => `<option>${v}</option>`).join('');
 }
 
-/* NLP SEARCH */
+/* ---------------- NLP SEARCH ---------------- */
 function score(skill, query) {
+
     let text = `
-        ${skill.title}
-        ${skill.summary}
-        ${(skill.domain||[]).join(" ")}
-        ${(skill.usage||[]).join(" ")}
-        ${(skill.tech||[]).join(" ")}
-        ${(skill.language||[]).join(" ")}
+        ${skill.title || ""}
+        ${skill.summary || ""}
+        ${arr(skill.domain).join(" ")}
+        ${arr(skill.usage).join(" ")}
+        ${arr(skill.tech).join(" ")}
+        ${arr(skill.language).join(" ")}
     `.toLowerCase();
 
     return query.split(" ").reduce((acc,q)=>
         acc + (text.includes(q)?1:0),0);
 }
 
-/* APPLY */
+/* ---------------- APPLY FILTER ---------------- */
 function apply() {
 
     let filtered = SKILLS;
@@ -219,10 +235,10 @@ function apply() {
     const diff = val("difficultyFilter");
 
     filtered = filtered.filter(s =>
-        (!domain || s.domain?.includes(domain)) &&
-        (!usage || s.usage?.includes(usage)) &&
-        (!tech || s.tech?.includes(tech)) &&
-        (!lang || s.language?.includes(lang)) &&
+        (!domain || arr(s.domain).includes(domain)) &&
+        (!usage || arr(s.usage).includes(usage)) &&
+        (!tech || arr(s.tech).includes(tech)) &&
+        (!lang || arr(s.language).includes(lang)) &&
         (!diff || s.difficulty === diff)
     );
 
@@ -239,32 +255,32 @@ function val(id){
     return document.getElementById(id).value;
 }
 
-/* RENDER */
+/* ---------------- RENDER ---------------- */
 function render(list) {
 
     const grid = document.getElementById("grid");
 
     if (!list.length) {
-        grid.innerHTML = "No skills found";
+        grid.innerHTML = "<div style='padding:20px'>No skills found</div>";
         return;
     }
 
     grid.innerHTML = list.map(s => `
         <div class="card">
 
-            <div class="title">${s.title}</div>
+            <div class="title">${s.title || "Untitled Skill"}</div>
 
-            <div class="summary">${s.summary}</div>
+            <div class="summary">${s.summary || ""}</div>
 
             <div class="tags">
-                ${(s.domain||[]).map(tag).join("")}
-                ${(s.usage||[]).map(tag).join("")}
-                ${(s.tech||[]).map(tag).join("")}
-                ${(s.language||[]).map(tag).join("")}
+                ${arr(s.domain).map(tag).join("")}
+                ${arr(s.usage).map(tag).join("")}
+                ${arr(s.tech).map(tag).join("")}
+                ${arr(s.language).map(tag).join("")}
             </div>
 
             <div class="meta">
-                Difficulty: ${s.difficulty}
+                Difficulty: ${s.difficulty || "medium"}
             </div>
 
         </div>
@@ -275,7 +291,7 @@ function tag(t){
     return `<span class="tag">${t}</span>`;
 }
 
-/* UPLOAD */
+/* ---------------- UPLOAD ---------------- */
 document.getElementById("fileInput")
 .addEventListener("change", async (e)=>{
 
@@ -285,26 +301,33 @@ document.getElementById("fileInput")
     const form = new FormData();
     form.append("file", file);
 
-    const res = await fetch(`${API}/process-skill`,{
-        method:"POST",
-        body:form
-    });
+    try {
+        const res = await fetch(`${API}/process-skill`,{
+            method:"POST",
+            body:form
+        });
 
-    const skill = await res.json();
+        const skill = await res.json();
 
-    SKILLS.unshift(skill);
-    buildFilters();
-    render(SKILLS);
+        console.log("Uploaded skill:", skill);
+
+        // safest: reload from backend
+        await load();
+
+    } catch (err) {
+        console.error("Upload failed", err);
+        alert("Upload failed");
+    }
 });
 
-/* EVENTS */
+/* ---------------- EVENTS ---------------- */
 document.querySelectorAll("select")
     .forEach(el=>el.addEventListener("change",apply));
 
 document.getElementById("searchBox")
     .addEventListener("input",apply);
 
-/* INIT */
+/* ---------------- INIT ---------------- */
 load();
 
 </script>
