@@ -18,8 +18,10 @@
 
     <div class="main-wrapper">
         <aside class="sidebar">
+
             <div class="sidebar-section">
                 <div class="sidebar-section-title">📤 Ingest Skill</div>
+
                 <input type="file" id="skillFile" accept=".md" style="display:none">
 
                 <button class="sidebar-apply-btn"
@@ -34,6 +36,7 @@
                     Real Estate (Default)
                 </div>
             </div>
+
         </aside>
 
         <main class="content-area">
@@ -42,71 +45,83 @@
         </main>
     </div>
 
-    <script>
-    const API_BASE = "https://synapse-platform.onrender.com";
+<script>
 
-    const grid = document.getElementById('projectGrid');
+const API_BASE = "https://synapse-platform.onrender.com";
+const grid = document.getElementById("projectGrid");
 
-    // ---------------------------
-    // LOAD ALL SKILLS ON PAGE LOAD
-    // ---------------------------
-    async function loadSkills() {
-        try {
-            const res = await fetch(`${API_BASE}/skills`);
-            const skills = await res.json();
+/* -------------------------
+   SAFE RENDER HELPERS
+--------------------------*/
 
-            grid.innerHTML = ""; // clear old UI
+function safe(text) {
+    return String(text || "")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll("`", "'");
+}
 
-            skills.forEach(renderCard);
+/* -------------------------
+   LOAD ALL SKILLS
+--------------------------*/
 
-        } catch (err) {
-            console.error("Failed to load skills:", err);
-        }
+async function loadSkills() {
+    try {
+        const res = await fetch(`${API_BASE}/skills`);
+        const skills = await res.json();
+
+        grid.innerHTML = "";
+
+        skills.forEach(renderCard);
+
+    } catch (err) {
+        console.error("Failed to load skills:", err);
     }
+}
 
-    // ---------------------------
-    // UPLOAD SKILL
-    // ---------------------------
-    document.getElementById('skillFile').addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+/* -------------------------
+   UPLOAD SKILL
+--------------------------*/
 
-        const formData = new FormData();
-        formData.append('file', file);
+document.getElementById("skillFile")
+.addEventListener("change", async (e) => {
 
-        try {
-            const response = await fetch(`${API_BASE}/process-skill`, {
-                method: 'POST',
-                body: formData
-            });
+    const file = e.target.files[0];
+    if (!file) return;
 
-            if (!response.ok) {
-                throw new Error("Server error: " + response.status);
-            }
+    const formData = new FormData();
+    formData.append("file", file);
 
-            const skill = await response.json();
+    try {
+        const res = await fetch(`${API_BASE}/process-skill`, {
+            method: "POST",
+            body: formData
+        });
 
-            renderCard(skill);
-
-        } catch (err) {
-            console.error(err);
-            alert("Backend error or not reachable!");
+        if (!res.ok) {
+            throw new Error("Upload failed");
         }
-    });
 
-    // ---------------------------
-    // RENDER CARD
-    // ---------------------------
-   function renderCard(skill) {
+        const skill = await res.json();
 
-    const safe = (text) =>
-        String(text || "")
-            .replaceAll("<", "&lt;")
-            .replaceAll(">", "&gt;");
+        renderCard(skill);
 
-    const tags = (skill.tags || []).map(t =>
-        `<span class="tag">${safe(t)}</span>`
-    ).join('');
+    } catch (err) {
+        console.error(err);
+        alert("Upload failed");
+    }
+});
+
+/* -------------------------
+   RENDER CARD (LLM SAFE)
+--------------------------*/
+
+function renderCard(skill) {
+
+    const tags = (skill.tags || [])
+        .slice(0, 5)
+        .map(t => `<span class="tag">${safe(t)}</span>`)
+        .join('');
 
     const points = (skill.key_points || [])
         .slice(0, 4)
@@ -115,14 +130,18 @@
 
     const cardHtml = `
         <div class="project-card">
-            <div class="rank-badge">NEW</div>
+
+            <div class="rank-badge">
+                ${safe(skill.difficulty || "medium")}
+            </div>
 
             <div class="card-header">
                 <div class="card-icon">📄</div>
 
                 <div class="card-header-text">
-                    <div class="card-name">${safe(skill.title)}</div>
-                    <div class="card-byline">Difficulty: ${safe(skill.difficulty)}</div>
+                    <div class="card-name">
+                        ${safe(skill.title)}
+                    </div>
                 </div>
             </div>
 
@@ -144,30 +163,34 @@
                     Download MD
                 </button>
             </div>
+
         </div>
     `;
 
-    grid.insertAdjacentHTML('afterbegin', cardHtml);
+    grid.insertAdjacentHTML("afterbegin", cardHtml);
 }
 
-    // ---------------------------
-    // DOWNLOAD MARKDOWN
-    // ---------------------------
-    function downloadMD(name, content) {
-        const blob = new Blob([content], { type: 'text/markdown' });
-        const url = window.URL.createObjectURL(blob);
+/* -------------------------
+   DOWNLOAD MARKDOWN
+--------------------------*/
 
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${name}.md`;
-        a.click();
-    }
+function downloadMD(name, content) {
+    const blob = new Blob([content], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
 
-    // ---------------------------
-    // INIT APP
-    // ---------------------------
-    loadSkills();
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${name}.md`;
+    a.click();
+}
 
-    </script>
+/* -------------------------
+   INIT
+--------------------------*/
+
+loadSkills();
+
+</script>
+
 </body>
 </html>
