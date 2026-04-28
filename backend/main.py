@@ -4,6 +4,7 @@ import frontmatter
 from backend.agent import extract_skill
 from backend.database import init_db, insert_skill, get_all_skills
 from backend.database import DB_NAME
+import os
 app = FastAPI()
 
 app.add_middleware(
