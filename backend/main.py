@@ -1,7 +1,7 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 import frontmatter
-
+from backend.agent import extract_skill
 from backend.database import init_db, insert_skill, get_all_skills
 
 app = FastAPI()
@@ -32,20 +32,19 @@ async def process_skill(file: UploadFile = File(...)):
 
     post = frontmatter.loads(text)
 
-    tags = post.get("allowed-tools", [])
-    if not isinstance(tags, list):
-        tags = [str(tags)]
+    # 🧠 AGENT STEP (IMPORTANT)
+    skill = extract_skill(text, post)
 
-    skill = {
-        "title": post.get("name", "Untitled Skill"),
-        "description": post.get("description", "No description provided"),
-        "tags": tags,
-        "model": post.get("model", "N/A"),
-        "effort": post.get("effort", "N/A"),
-        "raw_content": text
-    }
+    # attach raw only for download, NOT UI
+    skill["raw_content"] = text
 
-    # 💾 SAVE TO DB
     insert_skill(skill)
 
     return skill
+
+@app.delete("/reset-db")
+def reset_db():
+    import os
+    if os.path.exists("skills.db"):
+        os.remove("skills.db")
+    return {"status": "db cleared"}
