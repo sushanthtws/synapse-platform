@@ -1,59 +1,117 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Synapse - Knowledge Platform</title>
-    <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<title>Synapse - Knowledge Platform</title>
+<link rel="stylesheet" href="style.css">
+
+<style>
+/* ---------------- TOP BAR ---------------- */
+.top-bar {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.search-input {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+}
+
+.filter {
+    padding: 10px;
+    border-radius: 6px;
+    border: 1px solid #ddd;
+}
+
+/* ---------------- CARD ENHANCEMENTS ---------------- */
+.card-points {
+    margin: 10px 0;
+    padding-left: 18px;
+    color: #57606a;
+    font-size: 13px;
+}
+
+.card-points li {
+    margin-bottom: 4px;
+}
+</style>
 </head>
 
 <body>
-    <header class="header">
-        <div class="header-content">
-            <a href="index.html" class="logo">⚡ Synapse</a>
-            <nav class="nav-tabs">
-                <a href="#" class="nav-tab active">Explore & Ingest</a>
-            </nav>
-        </div>
-    </header>
 
-    <div class="main-wrapper">
-        <aside class="sidebar">
-
-            <div class="sidebar-section">
-                <div class="sidebar-section-title">📤 Ingest Skill</div>
-
-                <input type="file" id="skillFile" accept=".md" style="display:none">
-
-                <button class="sidebar-apply-btn"
-                        onclick="document.getElementById('skillFile').click()">
-                    + Upload Skill.md
-                </button>
-            </div>
-
-            <div class="sidebar-section">
-                <div class="sidebar-section-title">📁 Industry</div>
-                <div style="font-size: 13px; color: var(--color-text-secondary);">
-                    Real Estate (Default)
-                </div>
-            </div>
-
-        </aside>
-
-        <main class="content-area">
-            <div class="section-title">🥇 Skill Knowledge Grid</div>
-            <div class="project-grid" id="projectGrid"></div>
-        </main>
+<header class="header">
+    <div class="header-content">
+        <a href="index.html" class="logo">⚡ Synapse</a>
+        <nav class="nav-tabs">
+            <a href="#" class="nav-tab active">Explore & Ingest</a>
+        </nav>
     </div>
+</header>
+
+<div class="main-wrapper">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+
+        <div class="sidebar-section">
+            <div class="sidebar-section-title">📤 Ingest Skill</div>
+
+            <input type="file" id="skillFile" accept=".md" style="display:none">
+
+            <button class="sidebar-apply-btn"
+                onclick="document.getElementById('skillFile').click()">
+                + Upload Skill.md
+            </button>
+        </div>
+
+        <div class="sidebar-section">
+            <div class="sidebar-section-title">📁 Industry</div>
+            <div style="font-size: 13px; color: var(--color-text-secondary);">
+                Real Estate (Default)
+            </div>
+        </div>
+
+    </aside>
+
+    <!-- MAIN -->
+    <main class="content-area">
+
+        <div class="section-title">🥇 Skill Knowledge Grid</div>
+
+        <!-- TOP BAR (SEARCH + FILTER) -->
+        <div class="top-bar">
+            <input id="searchBox"
+                   class="search-input"
+                   placeholder="Search skills...">
+
+            <select id="difficultyFilter" class="filter">
+                <option value="all">All Levels</option>
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+            </select>
+        </div>
+
+        <!-- GRID -->
+        <div class="project-grid" id="projectGrid"></div>
+
+    </main>
+
+</div>
 
 <script>
 
+/* ---------------- CONFIG ---------------- */
 const API_BASE = "https://synapse-platform.onrender.com";
+
+/* ---------------- STATE ---------------- */
+let ALL_SKILLS = [];
 const grid = document.getElementById("projectGrid");
 
-/* -------------------------
-   SAFE RENDER HELPERS
---------------------------*/
-
+/* ---------------- SAFE TEXT ---------------- */
 function safe(text) {
     return String(text || "")
         .replaceAll("<", "&lt;")
@@ -61,28 +119,47 @@ function safe(text) {
         .replaceAll("`", "'");
 }
 
-/* -------------------------
-   LOAD ALL SKILLS
---------------------------*/
-
+/* ---------------- LOAD SKILLS ---------------- */
 async function loadSkills() {
     try {
         const res = await fetch(`${API_BASE}/skills`);
-        const skills = await res.json();
-
-        grid.innerHTML = "";
-
-        skills.forEach(renderCard);
-
+        ALL_SKILLS = await res.json();
+        renderAll(ALL_SKILLS);
     } catch (err) {
         console.error("Failed to load skills:", err);
     }
 }
 
-/* -------------------------
-   UPLOAD SKILL
---------------------------*/
+/* ---------------- RENDER ALL ---------------- */
+function renderAll(skills) {
+    grid.innerHTML = "";
+    skills.forEach(renderCard);
+}
 
+/* ---------------- FILTER ENGINE ---------------- */
+function applyFilters() {
+
+    const query = document.getElementById("searchBox").value.toLowerCase();
+    const difficulty = document.getElementById("difficultyFilter").value;
+
+    let filtered = ALL_SKILLS;
+
+    if (difficulty !== "all") {
+        filtered = filtered.filter(s => s.difficulty === difficulty);
+    }
+
+    if (query) {
+        filtered = filtered.filter(s =>
+            (s.title || "").toLowerCase().includes(query) ||
+            (s.description || "").toLowerCase().includes(query) ||
+            (s.tags || []).join(" ").toLowerCase().includes(query)
+        );
+    }
+
+    renderAll(filtered);
+}
+
+/* ---------------- UPLOAD ---------------- */
 document.getElementById("skillFile")
 .addEventListener("change", async (e) => {
 
@@ -98,13 +175,10 @@ document.getElementById("skillFile")
             body: formData
         });
 
-        if (!res.ok) {
-            throw new Error("Upload failed");
-        }
-
         const skill = await res.json();
 
-        renderCard(skill);
+        ALL_SKILLS.unshift(skill);
+        renderAll(ALL_SKILLS);
 
     } catch (err) {
         console.error(err);
@@ -112,10 +186,7 @@ document.getElementById("skillFile")
     }
 });
 
-/* -------------------------
-   RENDER CARD (LLM SAFE)
---------------------------*/
-
+/* ---------------- CARD RENDER ---------------- */
 function renderCard(skill) {
 
     const tags = (skill.tags || [])
@@ -170,10 +241,7 @@ function renderCard(skill) {
     grid.insertAdjacentHTML("afterbegin", cardHtml);
 }
 
-/* -------------------------
-   DOWNLOAD MARKDOWN
---------------------------*/
-
+/* ---------------- DOWNLOAD ---------------- */
 function downloadMD(name, content) {
     const blob = new Blob([content], { type: "text/markdown" });
     const url = URL.createObjectURL(blob);
@@ -184,10 +252,14 @@ function downloadMD(name, content) {
     a.click();
 }
 
-/* -------------------------
-   INIT
---------------------------*/
+/* ---------------- EVENTS ---------------- */
+document.getElementById("searchBox")
+    .addEventListener("input", applyFilters);
 
+document.getElementById("difficultyFilter")
+    .addEventListener("change", applyFilters);
+
+/* ---------------- INIT ---------------- */
 loadSkills();
 
 </script>

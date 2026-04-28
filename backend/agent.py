@@ -7,7 +7,14 @@ def get_client():
     return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 SCHEMA = """
-Return ONLY valid JSON in this format:
+You MUST return ONLY valid JSON.
+
+No explanation.
+No markdown.
+No extra text.
+
+Return exactly this format:
+
 {
   "title": string (max 60 chars),
   "description": string (max 140 chars),
@@ -17,53 +24,62 @@ Return ONLY valid JSON in this format:
 }
 """
 
+def get_client():
+    return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+
 def extract_skill(text, post):
 
+    client = get_client()
+
     prompt = f"""
-You are a skill extraction system.
+Convert this markdown skill into structured JSON.
 
-Convert the following markdown into structured skill data.
+RULES:
+- Remove all code blocks
+- Extract only learning information
+- Keep it concise
+- STRICT JSON ONLY
 
-Rules:
-- Remove code blocks
-- Extract meaningful learning points
-- Keep output concise
-- No markdown in output
-- STRICT JSON only
+Title hint: {post.get('name', '')}
+Allowed tools: {post.get('allowed-tools', [])}
 
-User metadata:
-name: {post.get('name', 'Untitled')}
-allowed-tools: {post.get('allowed-tools', [])}
-
-Content:
+CONTENT:
 {text}
 
 {SCHEMA}
 """
-    client = get_client()
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are a strict JSON generator."},
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.2
+    )
+
+    raw = response.choices[0].message.content
+
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You output only strict JSON."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.2
-        )
-
-        content = response.choices[0].message.content
-
-        # enforce JSON safety
-        data = json.loads(content)
-
-        return data
-
-    except Exception as e:
-        # fallback safe output
+        data = json.loads(raw)   # 👈 strict enforcement
+    except Exception:
+        # fallback safety
         return {
-            "title": post.get("name", "Untitled Skill"),
+            "title": "Parse Error",
             "description": text[:140],
             "tags": [],
             "key_points": [],
-            "difficulty": "medium"
+            "difficulty": "medium",
+            "llm_error": True
         }
+
+    # final UI safety trim
+    return {
+        "title": str(data.get("title", ""))[:60],
+        "description": str(data.get("description", ""))[:140],
+        "tags": (data.get("tags", []))[:5],
+        "key_points": (data.get("key_points", []))[:4],
+        "difficulty": data.get("difficulty", "medium"),
+        "llm_used": True   # 👈 IMPORTANT DEBUG FLAG
+    }
