@@ -2,9 +2,10 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 import frontmatter
 
+from backend.database import init_db, insert_skill, get_all_skills
+
 app = FastAPI()
 
-# CORS (tighten later)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -12,9 +13,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+init_db()
+
 @app.get("/")
 def home():
     return {"status": "API running"}
+
+# ✅ NEW: get all stored skills
+@app.get("/skills")
+def skills():
+    return get_all_skills()
 
 @app.post("/process-skill")
 async def process_skill(file: UploadFile = File(...)):
@@ -27,7 +35,7 @@ async def process_skill(file: UploadFile = File(...)):
     if not isinstance(tags, list):
         tags = [str(tags)]
 
-    return {
+    skill = {
         "title": post.get("name", "Untitled Skill"),
         "description": post.get("description", "No description provided"),
         "tags": tags,
@@ -35,3 +43,8 @@ async def process_skill(file: UploadFile = File(...)):
         "effort": post.get("effort", "N/A"),
         "raw_content": text
     }
+
+    # 💾 STORE IN DB
+    insert_skill(skill)
+
+    return skill
