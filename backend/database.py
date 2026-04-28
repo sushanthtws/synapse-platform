@@ -6,6 +6,7 @@ DB_NAME = "skills.db"
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
+
     c.execute("""
         CREATE TABLE IF NOT EXISTS skills (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -17,6 +18,7 @@ def init_db():
             raw_content TEXT
         )
     """)
+
     conn.commit()
     conn.close()
 
@@ -24,6 +26,7 @@ def init_db():
 def insert_skill(skill):
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
+
     c.execute("""
         INSERT INTO skills (title, description, tags, model, effort, raw_content)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -35,6 +38,7 @@ def insert_skill(skill):
         skill["effort"],
         skill["raw_content"]
     ))
+
     conn.commit()
     conn.close()
 
@@ -42,8 +46,10 @@ def insert_skill(skill):
 def get_all_skills():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
+
     c.execute("SELECT * FROM skills")
     rows = c.fetchall()
+
     conn.close()
 
     result = []
@@ -57,4 +63,5 @@ def get_all_skills():
             "effort": r[5],
             "raw_content": r[6],
         })
+
     return result

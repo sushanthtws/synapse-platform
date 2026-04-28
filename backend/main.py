@@ -13,13 +13,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# init DB on startup
 init_db()
 
 @app.get("/")
 def home():
     return {"status": "API running"}
 
-# ✅ NEW: get all stored skills
+# ✅ NEW: fetch all stored skills
 @app.get("/skills")
 def skills():
     return get_all_skills()
@@ -44,7 +45,7 @@ async def process_skill(file: UploadFile = File(...)):
         "raw_content": text
     }
 
-    # 💾 STORE IN DB
+    # 💾 SAVE TO DB
     insert_skill(skill)
 
     return skill
