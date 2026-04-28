@@ -14,25 +14,57 @@ body {
 /* HEADER */
 .header {
     background: white;
-    padding: 12px 20px;
-    border-bottom: 1px solid #ddd;
-    font-weight: 700;
-}
-
-/* FILTER BAR */
-.filter-bar {
-    background: white;
-    padding: 12px;
+    padding: 14px 20px;
     border-bottom: 1px solid #ddd;
     display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
 }
 
-select, input {
-    padding: 8px;
+.logo {
+    font-weight: 700;
+    font-size: 18px;
+    color: #0969da;
+}
+
+.upload-btn {
+    background: #2da44e;
+    color: white;
+    border: none;
+    padding: 8px 14px;
     border-radius: 6px;
+    cursor: pointer;
+}
+
+/* SEARCH */
+.search-bar {
+    padding: 14px 20px;
+    background: white;
+    border-bottom: 1px solid #ddd;
+}
+
+.search-bar input {
+    width: 100%;
+    padding: 12px;
+    font-size: 14px;
+    border-radius: 8px;
     border: 1px solid #ccc;
+}
+
+/* FILTERS */
+.filters {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+    padding: 12px 20px;
+    background: white;
+    border-bottom: 1px solid #ddd;
+}
+
+.filters select {
+    width: 100%;
+    padding: 10px;
+    border-radius: 6px;
 }
 
 /* GRID */
@@ -47,7 +79,7 @@ select, input {
 .card {
     background: white;
     border: 1px solid #ddd;
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 16px;
     transition: 0.2s;
 }
@@ -55,10 +87,12 @@ select, input {
 .card:hover {
     transform: translateY(-3px);
     border-color: #0969da;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.1);
 }
 
 .title {
     font-weight: 700;
+    font-size: 15px;
     color: #0969da;
 }
 
@@ -76,36 +110,48 @@ select, input {
 
 .tag {
     font-size: 11px;
-    padding: 3px 8px;
-    border-radius: 10px;
+    padding: 4px 8px;
+    border-radius: 12px;
     background: #f0f6ff;
 }
 
 .meta {
+    margin-top: 10px;
     font-size: 11px;
     color: #666;
-    margin-top: 10px;
 }
 </style>
 </head>
 
 <body>
 
-<div class="header">⚡ Synapse Skills</div>
+<!-- HEADER -->
+<div class="header">
+    <div class="logo">⚡ Synapse</div>
 
-<!-- FILTER BAR -->
-<div class="filter-bar">
+    <input type="file" id="fileInput" style="display:none">
 
+    <button class="upload-btn"
+        onclick="document.getElementById('fileInput').click()">
+        + Upload Skill
+    </button>
+</div>
+
+<!-- SEARCH -->
+<div class="search-bar">
     <input id="searchBox" placeholder="🔍 Search skills (NLP enabled)">
+</div>
 
+<!-- FILTERS -->
+<div class="filters">
     <select id="domainFilter"></select>
     <select id="usageFilter"></select>
     <select id="techFilter"></select>
     <select id="langFilter"></select>
     <select id="difficultyFilter"></select>
-
 </div>
 
+<!-- GRID -->
 <div class="grid" id="grid"></div>
 
 <script>
@@ -114,43 +160,38 @@ const API = "https://synapse-platform.onrender.com";
 
 let SKILLS = [];
 
-/* ---------------- LOAD ---------------- */
+/* LOAD */
 async function load() {
     const res = await fetch(`${API}/skills`);
     SKILLS = await res.json();
-
     buildFilters();
     render(SKILLS);
 }
 
-/* ---------------- BUILD FILTERS ---------------- */
+/* FILTER BUILD */
 function buildFilters() {
-
-    build("domainFilter", "domain");
-    build("usageFilter", "usage");
-    build("techFilter", "tech");
-    build("langFilter", "language");
-    build("difficultyFilter", "difficulty");
+    build("domainFilter","domain");
+    build("usageFilter","usage");
+    build("techFilter","tech");
+    build("langFilter","language");
+    build("difficultyFilter","difficulty");
 }
 
 function build(id, field) {
     const el = document.getElementById(id);
-
     const values = new Set();
 
     SKILLS.forEach(s => {
         (s[field] || []).forEach(v => values.add(v));
     });
 
-    el.innerHTML = `<option value="">All ${field}</option>` +
+    el.innerHTML =
+        `<option value="">All ${field}</option>` +
         [...values].map(v => `<option>${v}</option>`).join('');
 }
 
-/* ---------------- NLP SEARCH ---------------- */
+/* NLP SEARCH */
 function score(skill, query) {
-
-    query = query.toLowerCase();
-
     let text = `
         ${skill.title}
         ${skill.summary}
@@ -160,21 +201,16 @@ function score(skill, query) {
         ${(skill.language||[]).join(" ")}
     `.toLowerCase();
 
-    let score = 0;
-
-    query.split(" ").forEach(q => {
-        if (text.includes(q)) score++;
-    });
-
-    return score;
+    return query.split(" ").reduce((acc,q)=>
+        acc + (text.includes(q)?1:0),0);
 }
 
-/* ---------------- FILTER ---------------- */
+/* APPLY */
 function apply() {
 
     let filtered = SKILLS;
 
-    const q = document.getElementById("searchBox").value;
+    const q = document.getElementById("searchBox").value.toLowerCase();
 
     const domain = val("domainFilter");
     const usage = val("usageFilter");
@@ -193,17 +229,17 @@ function apply() {
     if (q) {
         filtered = filtered
             .map(s => ({...s, _score: score(s,q)}))
-            .sort((a,b) => b._score - a._score);
+            .sort((a,b)=>b._score-a._score);
     }
 
     render(filtered);
 }
 
-function val(id) {
+function val(id){
     return document.getElementById(id).value;
 }
 
-/* ---------------- RENDER ---------------- */
+/* RENDER */
 function render(list) {
 
     const grid = document.getElementById("grid");
@@ -221,10 +257,10 @@ function render(list) {
             <div class="summary">${s.summary}</div>
 
             <div class="tags">
-                ${(s.domain||[]).map(t=>tag(t)).join("")}
-                ${(s.usage||[]).map(t=>tag(t)).join("")}
-                ${(s.tech||[]).map(t=>tag(t)).join("")}
-                ${(s.language||[]).map(t=>tag(t)).join("")}
+                ${(s.domain||[]).map(tag).join("")}
+                ${(s.usage||[]).map(tag).join("")}
+                ${(s.tech||[]).map(tag).join("")}
+                ${(s.language||[]).map(tag).join("")}
             </div>
 
             <div class="meta">
@@ -235,18 +271,40 @@ function render(list) {
     `).join('');
 }
 
-function tag(t) {
+function tag(t){
     return `<span class="tag">${t}</span>`;
 }
 
-/* ---------------- EVENTS ---------------- */
-document.querySelectorAll("select,input")
-    .forEach(el => el.addEventListener("change", apply));
+/* UPLOAD */
+document.getElementById("fileInput")
+.addEventListener("change", async (e)=>{
+
+    const file = e.target.files[0];
+    if(!file) return;
+
+    const form = new FormData();
+    form.append("file", file);
+
+    const res = await fetch(`${API}/process-skill`,{
+        method:"POST",
+        body:form
+    });
+
+    const skill = await res.json();
+
+    SKILLS.unshift(skill);
+    buildFilters();
+    render(SKILLS);
+});
+
+/* EVENTS */
+document.querySelectorAll("select")
+    .forEach(el=>el.addEventListener("change",apply));
 
 document.getElementById("searchBox")
-    .addEventListener("input", apply);
+    .addEventListener("input",apply);
 
-/* ---------------- INIT ---------------- */
+/* INIT */
 load();
 
 </script>
