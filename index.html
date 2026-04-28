@@ -6,10 +6,11 @@
 <link rel="stylesheet" href="style.css">
 
 <style>
-.graph {
+.header-bar {
     display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 15px;
 }
 
 .node {
@@ -32,6 +33,21 @@
     box-shadow: 0 0 10px #0969da33;
 }
 
+.graph {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.upload-btn {
+    padding: 8px 12px;
+    background: #0969da;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
 .badge {
     font-size: 10px;
     background: #f0f7ff;
@@ -47,15 +63,25 @@
 
 <header class="header">
     <div class="header-content">
-        <a href="#" class="logo">⚡ Synapse Graph</a>
+        <a class="logo">⚡ Synapse Graph</a>
     </div>
 </header>
 
 <main class="content-area">
 
-    <div class="section-title">Skill Knowledge Graph</div>
+    <!-- RESTORED HEADER CONTROLS -->
+    <div class="header-bar">
 
-    <input id="searchBox" class="search-input" placeholder="Search skills...">
+        <input type="file" id="skillFile" accept=".md" style="display:none">
+
+        <button class="upload-btn"
+                onclick="document.getElementById('skillFile').click()">
+            + Upload Skill
+        </button>
+
+        <input id="searchBox" class="search-input" placeholder="Search skills...">
+
+    </div>
 
     <div id="graph" class="graph"></div>
 
@@ -66,7 +92,6 @@
 const API_BASE = "https://synapse-platform.onrender.com";
 
 let SKILLS = [];
-let selected = null;
 
 /* ---------------- LOAD ---------------- */
 async function load() {
@@ -75,22 +100,26 @@ async function load() {
     render(SKILLS);
 }
 
-/* ---------------- RELATION ENGINE ---------------- */
-function related(a, b) {
+/* ---------------- UPLOAD ---------------- */
+document.getElementById("skillFile")
+.addEventListener("change", async (e) => {
 
-    if (!a || !b) return false;
+    const file = e.target.files[0];
+    if (!file) return;
 
-    return (
-        a.skill_type === b.skill_type ||
-        a.domain === b.domain ||
-        overlap(a.tool_tags, b.tool_tags) ||
-        overlap(a.tech_tags, b.tech_tags)
-    );
-}
+    const fd = new FormData();
+    fd.append("file", file);
 
-function overlap(arr1 = [], arr2 = []) {
-    return arr1.some(x => arr2.includes(x));
-}
+    const res = await fetch(`${API_BASE}/process-skill`, {
+        method: "POST",
+        body: fd
+    });
+
+    const skill = await res.json();
+
+    SKILLS.unshift(skill);
+    render(SKILLS);
+});
 
 /* ---------------- RENDER ---------------- */
 function render(list) {
@@ -115,28 +144,7 @@ function render(list) {
             </div>
         `;
 
-        node.onclick = () => highlight(s);
-
         graph.appendChild(node);
-    });
-}
-
-/* ---------------- HIGHLIGHT RELATIONS ---------------- */
-function highlight(skill) {
-
-    selected = skill;
-
-    document.querySelectorAll(".node").forEach((el, i) => {
-
-        const other = SKILLS[i];
-
-        if (other.title === skill.title) {
-            el.classList.add("active");
-        } else if (related(skill, other)) {
-            el.classList.add("active");
-        } else {
-            el.classList.remove("active");
-        }
     });
 }
 
@@ -146,9 +154,8 @@ document.getElementById("searchBox").addEventListener("input", (e) => {
     const q = e.target.value.toLowerCase();
 
     const filtered = SKILLS.filter(s =>
-        s.title.toLowerCase().includes(q) ||
-        s.summary.toLowerCase().includes(q) ||
-        (s.intent_tags || []).join(" ").toLowerCase().includes(q)
+        (s.title || "").toLowerCase().includes(q) ||
+        (s.summary || "").toLowerCase().includes(q)
     );
 
     render(filtered);
