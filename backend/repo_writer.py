@@ -3,7 +3,7 @@ import json
 import re
 
 
-BASE_SKILL_DIR = "skills"
+BASE_SKILL_DIR = os.getenv("BASE_SKILL_DIR", "/tmp/skills")
 
 
 # ---------------- UTIL ----------------

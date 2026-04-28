@@ -1,7 +1,8 @@
 import sqlite3
 import json
+import os
 
-DB_NAME = "skills.db"
+DB_NAME = os.getenv("DB_NAME", "/tmp/skills.db")
 
 # ---------------- INIT DB ----------------
 def init_db():
