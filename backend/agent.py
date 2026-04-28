@@ -1,7 +1,10 @@
 import json
 from openai import OpenAI
 
-client = OpenAI()
+import os
+
+def get_client():
+    return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 SCHEMA = """
 Return ONLY valid JSON in this format:
@@ -37,7 +40,7 @@ Content:
 
 {SCHEMA}
 """
-
+    client = get_client()
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
