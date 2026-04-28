@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import frontmatter
 from backend.agent import extract_skill
 from backend.database import init_db, insert_skill, get_all_skills
-
+from backend.database import DB_NAME
 app = FastAPI()
 
 app.add_middleware(
@@ -44,7 +44,16 @@ async def process_skill(file: UploadFile = File(...)):
 
 @app.delete("/reset-db")
 def reset_db():
-    import os
-    if os.path.exists("skills.db"):
-        os.remove("skills.db")
-    return {"status": "db cleared"}
+    try:
+        db_path = DB_NAME  # "skills.db"
+
+        if os.path.exists(db_path):
+            os.remove(db_path)
+
+        return {"status": "db cleared"}
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e)
+        }
