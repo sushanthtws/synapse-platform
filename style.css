@@ -1,0 +1,126 @@
+:root {
+    --color-bg-primary: #f6f8fa;
+    --color-bg-secondary: #ffffff;
+    --color-border: #d0d7de;
+    --color-text-primary: #24292f;
+    --color-text-secondary: #57606a;
+    --color-primary: #0969da;
+    --color-success: #2da44e;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background-color: var(--color-bg-primary);
+    color: var(--color-text-primary);
+    margin: 0;
+}
+
+.header {
+    background-color: var(--color-bg-secondary);
+    border-bottom: 1px solid var(--color-border);
+    padding: 12px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.logo {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--color-primary);
+    text-decoration: none;
+}
+
+.main-wrapper {
+    display: flex;
+    min-height: calc(100vh - 65px);
+}
+
+.sidebar {
+    width: 260px;
+    background-color: var(--color-bg-secondary);
+    border-right: 1px solid var(--color-border);
+    padding: 20px;
+}
+
+.sidebar-section-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+    margin-bottom: 12px;
+}
+
+.sidebar-apply-btn {
+    width: 100%;
+    padding: 10px;
+    background: var(--color-primary);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.content-area {
+    flex: 1;
+    padding: 32px;
+}
+
+.project-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 16px;
+}
+
+.project-card {
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 20px;
+    position: relative;
+}
+
+.rank-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    padding: 2px 8px;
+    font-size: 10px;
+    background: #eee;
+    border-radius: 12px;
+}
+
+.card-name {
+    font-weight: 700;
+    color: var(--color-primary);
+    margin-bottom: 4px;
+}
+
+.card-desc {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    margin-bottom: 12px;
+}
+
+.card-tags {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.tag {
+    font-size: 11px;
+    padding: 2px 8px;
+    background: #f0f7ff;
+    border: 1px solid #0969da44;
+    border-radius: 10px;
+    color: var(--color-primary);
+}
+
+.btn-secondary {
+    margin-top: 12px;
+    font-size: 12px;
+    padding: 4px 12px;
+    cursor: pointer;
+}
