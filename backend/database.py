@@ -3,6 +3,7 @@ import json
 
 DB_NAME = "skills.db"
 
+# ---------------- INIT DB ----------------
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
@@ -11,11 +12,10 @@ def init_db():
         CREATE TABLE IF NOT EXISTS skills (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT,
-            description TEXT,
+            summary TEXT,
             tags TEXT,
-            model TEXT,
-            effort TEXT,
-            raw_content TEXT
+            difficulty TEXT,
+            key_points TEXT
         )
     """)
 
@@ -23,26 +23,27 @@ def init_db():
     conn.close()
 
 
+# ---------------- INSERT SKILL ----------------
 def insert_skill(skill):
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
 
     c.execute("""
-        INSERT INTO skills (title, description, tags, model, effort, raw_content)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO skills (title, summary, tags, difficulty, key_points)
+        VALUES (?, ?, ?, ?, ?)
     """, (
         skill["title"],
-        skill["description"],
-        json.dumps(skill["tags"]),
-        skill["model"],
-        skill["effort"],
-        skill["raw_content"]
+        skill["summary"],
+        json.dumps(skill.get("tags", [])),
+        skill.get("difficulty", "medium"),
+        json.dumps(skill.get("key_points", []))
     ))
 
     conn.commit()
     conn.close()
 
 
+# ---------------- FETCH ALL SKILLS ----------------
 def get_all_skills():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
@@ -57,11 +58,10 @@ def get_all_skills():
         result.append({
             "id": r[0],
             "title": r[1],
-            "description": r[2],
+            "summary": r[2],
             "tags": json.loads(r[3]),
-            "model": r[4],
-            "effort": r[5],
-            "raw_content": r[6],
+            "difficulty": r[4],
+            "key_points": json.loads(r[5])
         })
 
     return result

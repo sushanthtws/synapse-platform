@@ -26,7 +26,7 @@
     border: 1px solid #ddd;
 }
 
-/* ---------------- CARD ENHANCEMENTS ---------------- */
+/* ---------------- CARD POINTS ---------------- */
 .card-points {
     margin: 10px 0;
     padding-left: 18px;
@@ -81,7 +81,7 @@
 
         <div class="section-title">🥇 Skill Knowledge Grid</div>
 
-        <!-- TOP BAR (SEARCH + FILTER) -->
+        <!-- SEARCH + FILTER -->
         <div class="top-bar">
             <input id="searchBox"
                    class="search-input"
@@ -136,7 +136,7 @@ function renderAll(skills) {
     skills.forEach(renderCard);
 }
 
-/* ---------------- FILTER ENGINE ---------------- */
+/* ---------------- FILTER ---------------- */
 function applyFilters() {
 
     const query = document.getElementById("searchBox").value.toLowerCase();
@@ -151,7 +151,7 @@ function applyFilters() {
     if (query) {
         filtered = filtered.filter(s =>
             (s.title || "").toLowerCase().includes(query) ||
-            (s.description || "").toLowerCase().includes(query) ||
+            (s.summary || "").toLowerCase().includes(query) ||
             (s.tags || []).join(" ").toLowerCase().includes(query)
         );
     }
@@ -217,7 +217,7 @@ function renderCard(skill) {
             </div>
 
             <div class="card-desc">
-                ${safe(skill.description)}
+                ${safe(skill.summary)}
             </div>
 
             <ul class="card-points">
@@ -230,8 +230,8 @@ function renderCard(skill) {
 
             <div class="card-footer">
                 <button class="btn-secondary"
-                    onclick="downloadMD('${safe(skill.title)}', \`${skill.raw_content || ""}\`)">
-                    Download MD
+                    onclick="downloadMD('${safe(skill.title)}', JSON.stringify(skill, null, 2))">
+                    Download JSON
                 </button>
             </div>
 
@@ -243,12 +243,12 @@ function renderCard(skill) {
 
 /* ---------------- DOWNLOAD ---------------- */
 function downloadMD(name, content) {
-    const blob = new Blob([content], { type: "text/markdown" });
+    const blob = new Blob([content], { type: "application/json" });
     const url = URL.createObjectURL(blob);
 
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${name}.md`;
+    a.download = `${name}.json`;
     a.click();
 }
 
