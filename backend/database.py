@@ -11,14 +11,24 @@ def init_db():
     c.execute("""
         CREATE TABLE IF NOT EXISTS skills (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+
             title TEXT,
             summary TEXT,
+
+            domain TEXT,              -- project management / migration / optimization / etc
+            usage TEXT,               -- why skill is used
             difficulty TEXT,
-            tags TEXT,
+
+            tags TEXT,                -- generic tags (UI chips)
+            tools TEXT,               -- APIs / frameworks
+            languages TEXT,           -- Python, Go, JS etc
+            tech_stack TEXT,          -- React, FastAPI, etc
+
             key_points TEXT,
 
-            -- NEW: AI intelligence blob
-            intelligence TEXT
+            repo_path TEXT,           -- where skill is stored in repo
+
+            raw_content TEXT
         )
     """)
 
@@ -31,39 +41,34 @@ def insert_skill(skill):
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
 
-    # Extract structured fields
-    title = skill.get("title")
-    summary = skill.get("summary")
-    difficulty = skill.get("difficulty", "medium")
-    tags = skill.get("tags", [])
-    key_points = skill.get("key_points", [])
-
-    # NEW intelligence layer (everything AI-related goes here)
-    intelligence = {
-        "skill_type": skill.get("skill_type"),
-        "domain": skill.get("domain"),
-        "intent_tags": skill.get("intent_tags", []),
-        "tool_tags": skill.get("tool_tags", []),
-        "tech_tags": skill.get("tech_tags", [])
-    }
-
     c.execute("""
         INSERT INTO skills (
-            title,
-            summary,
-            difficulty,
-            tags,
+            title, summary,
+            domain, usage, difficulty,
+            tags, tools, languages, tech_stack,
             key_points,
-            intelligence
+            repo_path,
+            raw_content
         )
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
-        title,
-        summary,
-        difficulty,
-        json.dumps(tags),
-        json.dumps(key_points),
-        json.dumps(intelligence)
+        skill.get("title"),
+        skill.get("summary"),
+
+        skill.get("domain"),
+        skill.get("usage"),
+        skill.get("difficulty", "medium"),
+
+        json.dumps(skill.get("tags", [])),
+        json.dumps(skill.get("tools", [])),
+        json.dumps(skill.get("languages", [])),
+        json.dumps(skill.get("tech_stack", [])),
+
+        json.dumps(skill.get("key_points", [])),
+
+        skill.get("repo_path"),
+
+        skill.get("raw_content")
     ))
 
     conn.commit()
@@ -75,30 +80,31 @@ def get_all_skills():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
 
-    c.execute("SELECT * FROM skills ORDER BY id DESC")
+    c.execute("SELECT * FROM skills")
     rows = c.fetchall()
 
     conn.close()
 
     result = []
-
     for r in rows:
-        intelligence = json.loads(r[6]) if r[6] else {}
-
         result.append({
             "id": r[0],
             "title": r[1],
             "summary": r[2],
-            "difficulty": r[3],
-            "tags": json.loads(r[4]) if r[4] else [],
-            "key_points": json.loads(r[5]) if r[5] else [],
 
-            # NEW flattened fields for frontend filtering
-            "skill_type": intelligence.get("skill_type"),
-            "domain": intelligence.get("domain"),
-            "intent_tags": intelligence.get("intent_tags", []),
-            "tool_tags": intelligence.get("tool_tags", []),
-            "tech_tags": intelligence.get("tech_tags", []),
+            "domain": r[3],
+            "usage": r[4],
+            "difficulty": r[5],
+
+            "tags": json.loads(r[6] or "[]"),
+            "tools": json.loads(r[7] or "[]"),
+            "languages": json.loads(r[8] or "[]"),
+            "tech_stack": json.loads(r[9] or "[]"),
+
+            "key_points": json.loads(r[10] or "[]"),
+
+            "repo_path": r[11],
+            "raw_content": r[12]
         })
 
     return result

@@ -2,107 +2,212 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Synapse Graph</title>
-<link rel="stylesheet" href="style.css">
+<title>Synapse — Skill Intelligence</title>
 
 <style>
-.header-bar {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    margin-bottom: 15px;
+body {
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #f6f8fa;
+    margin: 0;
 }
 
-.node {
-    padding: 12px;
-    border-radius: 10px;
-    border: 1px solid #ddd;
+/* HEADER */
+.header {
     background: white;
-    cursor: pointer;
-    width: 260px;
-    transition: 0.2s;
+    padding: 12px 20px;
+    border-bottom: 1px solid #ddd;
+    display:flex;
+    justify-content: space-between;
 }
+.logo { font-weight: 700; }
 
-.node:hover {
-    transform: scale(1.02);
-    border-color: #0969da;
-}
-
-.node.active {
-    border: 2px solid #0969da;
-    box-shadow: 0 0 10px #0969da33;
-}
-
-.graph {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-}
-
-.upload-btn {
-    padding: 8px 12px;
-    background: #0969da;
+/* HERO */
+.hero {
+    background: linear-gradient(135deg,#0a1628,#0f2a52);
     color: white;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
+    padding: 20px;
 }
 
-.badge {
-    font-size: 10px;
-    background: #f0f7ff;
-    padding: 2px 6px;
-    border-radius: 8px;
-    margin-right: 4px;
-    display: inline-block;
+/* FILTERS */
+.filters {
+    background:white;
+    padding:10px;
+    border-bottom:1px solid #ddd;
+}
+
+.chip {
+    display:inline-block;
+    padding:6px 10px;
+    border:1px solid #ddd;
+    border-radius:20px;
+    margin:4px;
+    cursor:pointer;
+    font-size:12px;
+}
+
+.chip.active {
+    background:#0969da;
+    color:white;
+}
+
+/* GRID */
+.grid {
+    padding:20px;
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(340px,1fr));
+    gap:16px;
+}
+
+/* CARD */
+.card {
+    background:white;
+    padding:16px;
+    border-radius:8px;
+    border:1px solid #ddd;
+}
+
+.title { font-weight:600; color:#0969da; }
+.summary { font-size:13px; color:#555; margin:8px 0; }
+
+.tags span {
+    font-size:11px;
+    background:#eee;
+    padding:4px 8px;
+    border-radius:8px;
+    margin:2px;
+    display:inline-block;
+}
+
+.meta {
+    font-size:11px;
+    color:#666;
+    margin-top:6px;
 }
 </style>
 </head>
 
 <body>
 
-<header class="header">
-    <div class="header-content">
-        <a class="logo">⚡ Synapse Graph</a>
+<!-- HEADER -->
+<div class="header">
+    <div class="logo">⚡ Synapse</div>
+
+    <!-- UPLOAD BACK (IMPORTANT) -->
+    <div>
+        <input type="file" id="file" style="display:none">
+        <button onclick="document.getElementById('file').click()">+ Upload</button>
     </div>
-</header>
+</div>
 
-<main class="content-area">
+<!-- HERO -->
+<div class="hero">
+    <h2>Skill Intelligence Grid</h2>
+    <p>AI-extracted reusable skills with domain + tech classification</p>
+</div>
 
-    <!-- RESTORED HEADER CONTROLS -->
-    <div class="header-bar">
+<!-- FILTERS -->
+<div class="filters" id="filters"></div>
 
-        <input type="file" id="skillFile" accept=".md" style="display:none">
-
-        <button class="upload-btn"
-                onclick="document.getElementById('skillFile').click()">
-            + Upload Skill
-        </button>
-
-        <input id="searchBox" class="search-input" placeholder="Search skills...">
-
-    </div>
-
-    <div id="graph" class="graph"></div>
-
-</main>
+<!-- GRID -->
+<div class="grid" id="grid"></div>
 
 <script>
 
-const API_BASE = "https://synapse-platform.onrender.com";
+const API = "https://synapse-platform.onrender.com";
 
-let SKILLS = [];
+let ALL = [];
+let ACTIVE = new Set();
 
-/* ---------------- LOAD ---------------- */
+/* LOAD */
 async function load() {
-    const res = await fetch(`${API_BASE}/skills`);
-    SKILLS = await res.json();
-    render(SKILLS);
+    const res = await fetch(`${API}/skills`);
+    ALL = await res.json();
+    buildFilters();
+    render();
 }
 
-/* ---------------- UPLOAD ---------------- */
-document.getElementById("skillFile")
-.addEventListener("change", async (e) => {
+/* BUILD FILTERS (DYNAMIC FROM DATA) */
+function buildFilters() {
+    const f = document.getElementById("filters");
+
+    let values = new Set();
+
+    ALL.forEach(s => {
+        if (s.domain) values.add(s.domain);
+        (s.tools || []).forEach(t => values.add(t));
+        (s.languages || []).forEach(l => values.add(l));
+        (s.tech_stack || []).forEach(t => values.add(t));
+    });
+
+    f.innerHTML = [...values].map(v =>
+        `<span class="chip" onclick="toggle('${v}', this)">${v}</span>`
+    ).join("");
+}
+
+/* TOGGLE FILTER */
+function toggle(val, el) {
+    if (ACTIVE.has(val)) {
+        ACTIVE.delete(val);
+        el.classList.remove("active");
+    } else {
+        ACTIVE.add(val);
+        el.classList.add("active");
+    }
+    render();
+}
+
+/* FILTER LOGIC */
+function match(skill) {
+    if (ACTIVE.size === 0) return true;
+
+    const fields = [
+        skill.domain,
+        ...(skill.tools || []),
+        ...(skill.languages || []),
+        ...(skill.tech_stack || [])
+    ];
+
+    return [...ACTIVE].every(f => fields.includes(f));
+}
+
+/* RENDER */
+function render() {
+
+    const grid = document.getElementById("grid");
+
+    const data = ALL.filter(match);
+
+    grid.innerHTML = data.map(s => `
+        <div class="card">
+
+            <div class="title">${s.title}</div>
+
+            <div class="summary">${s.summary}</div>
+
+            <div class="tags">
+                ${(s.tags || []).map(t => `<span>${t}</span>`).join("")}
+            </div>
+
+            <div class="meta">
+                <b>Domain:</b> ${s.domain || "-"}<br>
+                <b>Usage:</b> ${s.usage || "-"}<br>
+                <b>Difficulty:</b> ${s.difficulty}
+            </div>
+
+            <div class="meta">
+                <b>Tech:</b> ${(s.tech_stack || []).join(", ")}
+            </div>
+
+            <div class="meta">
+                <b>Lang:</b> ${(s.languages || []).join(", ")}
+            </div>
+
+        </div>
+    `).join("");
+}
+
+/* UPLOAD */
+document.getElementById("file").addEventListener("change", async (e) => {
 
     const file = e.target.files[0];
     if (!file) return;
@@ -110,58 +215,20 @@ document.getElementById("skillFile")
     const fd = new FormData();
     fd.append("file", file);
 
-    const res = await fetch(`${API_BASE}/process-skill`, {
+    const res = await fetch(`${API}/process-skill`, {
         method: "POST",
         body: fd
     });
 
     const skill = await res.json();
 
-    SKILLS.unshift(skill);
-    render(SKILLS);
+    ALL.unshift(skill);
+
+    buildFilters();
+    render();
 });
 
-/* ---------------- RENDER ---------------- */
-function render(list) {
-
-    const graph = document.getElementById("graph");
-    graph.innerHTML = "";
-
-    list.forEach(s => {
-
-        const node = document.createElement("div");
-        node.className = "node";
-
-        node.innerHTML = `
-            <div><b>${s.title}</b></div>
-            <div style="font-size:12px;color:#666;margin-top:6px;">
-                ${s.summary}
-            </div>
-
-            <div style="margin-top:8px;">
-                <span class="badge">${s.skill_type}</span>
-                <span class="badge">${s.domain}</span>
-            </div>
-        `;
-
-        graph.appendChild(node);
-    });
-}
-
-/* ---------------- SEARCH ---------------- */
-document.getElementById("searchBox").addEventListener("input", (e) => {
-
-    const q = e.target.value.toLowerCase();
-
-    const filtered = SKILLS.filter(s =>
-        (s.title || "").toLowerCase().includes(q) ||
-        (s.summary || "").toLowerCase().includes(q)
-    );
-
-    render(filtered);
-});
-
-/* ---------------- INIT ---------------- */
+/* INIT */
 load();
 
 </script>

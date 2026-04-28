@@ -1,107 +1,133 @@
 from openai import OpenAI
 import os
 import json
-import re
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-def safe_json_parse(text: str):
-    try:
-        return json.loads(text)
-    except:
-        match = re.search(r"\{.*\}", text, re.DOTALL)
-        if match:
-            return json.loads(match.group(0))
-        raise
+
+SCHEMA = """
+You are a senior system architect and skill classifier.
+
+Convert raw extracted skill into a structured "Skill Intelligence Object".
+
+You MUST classify intelligently:
+
+────────────────────────────
+1. DOMAIN (why this skill exists)
+────────────────────────────
+Choose ONE primary:
+- project_management
+- software_engineering
+- system_design
+- migration
+- optimization
+- automation
+- ai_ml
+- devops
+- data_engineering
+- productivity
+- research
+
+────────────────────────────
+2. USAGE (what it is used for)
+────────────────────────────
+Examples:
+- workflow optimization
+- system migration
+- API integration
+- LLM orchestration
+- performance tuning
+- task automation
+- team coordination
+
+────────────────────────────
+3. TECH EXTRACTION
+────────────────────────────
+Extract separately:
+- tools (APIs, frameworks like OpenAI, LangChain)
+- languages (Python, Go, JS, Java, etc.)
+- tech_stack (React, FastAPI, Kubernetes, etc.)
+
+────────────────────────────
+4. OUTPUT FORMAT (STRICT JSON ONLY)
+────────────────────────────
+
+{
+  "title": "...",
+  "summary": "...",
+
+  "domain": "...",
+  "usage": "...",
+
+  "difficulty": "easy|medium|hard",
+
+  "tags": ["..."],
+
+  "tools": ["..."],
+  "languages": ["..."],
+  "tech_stack": ["..."],
+
+  "key_points": ["..."],
+
+  "repo_path": "skills/<kebab-case-title>/"
+}
+
+────────────────────────────
+RULES:
+- NO markdown
+- NO explanation
+- MAX 1 sentence summary
+- MAX 5 tags
+- MAX 4 key_points
+- Always infer intelligently, do not leave empty arrays unless truly unknown
+"""
+
 
 def refine_skill(raw_skill: dict):
 
     prompt = f"""
-You are a SENIOR AI SKILL CLASSIFIER.
-
-You convert raw technical markdown into a structured skill intelligence object.
-
----
-
-### TASK
-Analyze WHY this skill exists and classify it.
-
----
-
-### OUTPUT RULES
-Return STRICT JSON only.
-
-No markdown.
-No explanation.
-No extra text.
-
----
-
-### OUTPUT SCHEMA
-
-{{
-  "title": "...",
-  "summary": "...",
-  "difficulty": "easy|medium|hard",
-
-  "key_points": ["..."],
-
-  "skill_type": "project_management | agile | coding | migration | productivity | optimization | devops | data | research",
-
-  "domain": "engineering | product | operations | data | ai | infra | business",
-
-  "intent_tags": [
-    "why this skill is used (high level intent)"
-  ],
-
-  "tool_tags": [
-    "Jira", "Git", "MCP", "Docker", "Notion"
-  ],
-
-  "tech_tags": [
-    "Python", "React", "FastAPI"
-  ]
-}}
-
----
-
-### RULES
-- "intent_tags" = WHY (purpose / motivation)
-- "tool_tags" = SOFTWARE / TOOLS USED
-- "tech_tags" = PROGRAMMING / FRAMEWORKS
-- Do NOT hallucinate tools if not present
-- Keep tags max 5 each
-
----
+Analyze this skill and convert it into structured system-ready format.
 
 RAW INPUT:
 {json.dumps(raw_skill, indent=2)}
+
+{SCHEMA}
 """
 
     res = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": "You are a strict skill classification engine."},
+            {"role": "system", "content": "You are a strict JSON system classifier."},
             {"role": "user", "content": prompt}
         ],
         temperature=0.2
     )
 
     content = res.choices[0].message.content
-    data = safe_json_parse(content)
 
-    return {
-        "title": str(data.get("title", ""))[:60],
-        "summary": str(data.get("summary", ""))[:160],
-        "difficulty": data.get("difficulty", "medium"),
-        "key_points": (data.get("key_points", []))[:4],
+    try:
+        data = json.loads(content)
+    except Exception:
+        return {
+            "title": raw_skill.get("title", "parse_error"),
+            "summary": raw_skill.get("description", "")[:120],
 
-        # NEW intelligence layer
-        "skill_type": data.get("skill_type", "unknown"),
-        "domain": data.get("domain", "unknown"),
-        "intent_tags": data.get("intent_tags", [])[:5],
-        "tool_tags": data.get("tool_tags", [])[:5],
-        "tech_tags": data.get("tech_tags", [])[:5],
+            "domain": "unknown",
+            "usage": "unknown",
 
-        "llm_used": True
-    }
+            "difficulty": "medium",
+
+            "tags": [],
+            "tools": [],
+            "languages": [],
+            "tech_stack": [],
+
+            "key_points": [],
+
+            "repo_path": "skills/unknown/"
+        }
+
+    # safety normalization
+    data["repo_path"] = data.get("repo_path") or f"skills/{data.get('title','unknown').lower().replace(' ','-')}/"
+
+    return data

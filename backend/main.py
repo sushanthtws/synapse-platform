@@ -5,6 +5,7 @@ import os
 
 from backend.refiner import refine_skill
 from backend.database import init_db, insert_skill, get_all_skills, DB_NAME
+from backend.repo_writer import save_skill_to_repo
 
 app = FastAPI()
 
@@ -31,23 +32,23 @@ def home():
 def skills():
     return get_all_skills()
 
-# ---------------- CORE PIPELINE ----------------
+# ---------------- PROCESS SKILL ----------------
 @app.post("/process-skill")
 async def process_skill(file: UploadFile = File(...)):
 
     try:
-        # 1. Read markdown file
+        # 1. Read markdown
         content = await file.read()
         text = content.decode("utf-8")
 
-        # 2. Parse frontmatter (basic metadata extraction only)
+        # 2. Parse frontmatter (light metadata only)
         post = frontmatter.loads(text)
 
         tags = post.get("allowed-tools", [])
         if not isinstance(tags, list):
             tags = [str(tags)]
 
-        # 3. RAW structured object (NO LLM HERE ANYMORE)
+        # 3. Raw skill object (pre-AI)
         raw_skill = {
             "title": post.get("name", "Untitled Skill"),
             "description": post.get("description", "No description provided"),
@@ -57,13 +58,22 @@ async def process_skill(file: UploadFile = File(...)):
             "raw_content": text
         }
 
-        # 4. LLM REFINER → converts raw skill → UI contract
+        # 4. AI refinement (core intelligence)
         clean_skill = refine_skill(raw_skill)
 
-        # 5. Store ONLY clean skill (stable schema)
+        # 5. Attach raw_content (so repo + DB has it if needed)
+        clean_skill["raw_content"] = text
+
+        # 6. Save to repo (creates folder + files)
+        repo_path = save_skill_to_repo(clean_skill)
+
+        # 7. Attach repo path
+        clean_skill["repo_path"] = repo_path
+
+        # 8. Store in DB
         insert_skill(clean_skill)
 
-        # 6. Return UI-ready object
+        # 9. Return UI-ready object
         return clean_skill
 
     except Exception as e:
