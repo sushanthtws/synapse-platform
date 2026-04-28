@@ -5,6 +5,7 @@
     <title>Synapse - Knowledge Platform</title>
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
     <header class="header">
         <div class="header-content">
@@ -20,14 +21,18 @@
             <div class="sidebar-section">
                 <div class="sidebar-section-title">📤 Ingest Skill</div>
                 <input type="file" id="skillFile" accept=".md" style="display:none">
-                <button class="sidebar-apply-btn" onclick="document.getElementById('skillFile').click()">
+
+                <button class="sidebar-apply-btn"
+                        onclick="document.getElementById('skillFile').click()">
                     + Upload Skill.md
                 </button>
             </div>
-            
+
             <div class="sidebar-section">
                 <div class="sidebar-section-title">📁 Industry</div>
-                <div style="font-size: 13px; color: var(--color-text-secondary);">Real Estate (Default)</div>
+                <div style="font-size: 13px; color: var(--color-text-secondary);">
+                    Real Estate (Default)
+                </div>
             </div>
         </aside>
 
@@ -38,8 +43,30 @@
     </div>
 
     <script>
-    const API_BASE = "https://synapse-platform.onrender.com"; // 🔁 YOUR RENDER URL
+    const API_BASE = "https://synapse-platform.onrender.com";
 
+    const grid = document.getElementById('projectGrid');
+
+    // ---------------------------
+    // LOAD ALL SKILLS ON PAGE LOAD
+    // ---------------------------
+    async function loadSkills() {
+        try {
+            const res = await fetch(`${API_BASE}/skills`);
+            const skills = await res.json();
+
+            grid.innerHTML = ""; // clear old UI
+
+            skills.forEach(renderCard);
+
+        } catch (err) {
+            console.error("Failed to load skills:", err);
+        }
+    }
+
+    // ---------------------------
+    // UPLOAD SKILL
+    // ---------------------------
     document.getElementById('skillFile').addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -58,23 +85,28 @@
             }
 
             const skill = await response.json();
+
             renderCard(skill);
+
         } catch (err) {
             console.error(err);
             alert("Backend error or not reachable!");
         }
     });
 
+    // ---------------------------
+    // RENDER CARD
+    // ---------------------------
     function renderCard(skill) {
-        const grid = document.getElementById('projectGrid');
 
-        const tags = (skill.tags || []).map(t => 
+        const tags = (skill.tags || []).map(t =>
             `<span class="tag">${t}</span>`
         ).join('');
 
         const cardHtml = `
             <div class="project-card">
                 <div class="rank-badge">NEW</div>
+
                 <div class="card-header">
                     <div class="card-icon">📄</div>
                     <div class="card-header-text">
@@ -82,26 +114,41 @@
                         <div class="card-byline">Model: ${skill.model}</div>
                     </div>
                 </div>
+
                 <div class="card-desc">${skill.description}</div>
+
                 <div class="card-tags">${tags}</div>
+
                 <div class="card-footer">
-                    <button class="btn-secondary" onclick="downloadMD('${skill.title}', \`${skill.raw_content}\`)">
+                    <button class="btn-secondary"
+                        onclick="downloadMD('${skill.title}', \`${skill.raw_content}\`)">
                         Download MD
                     </button>
                 </div>
-            </div>`;
+            </div>
+        `;
 
         grid.insertAdjacentHTML('afterbegin', cardHtml);
     }
 
+    // ---------------------------
+    // DOWNLOAD MARKDOWN
+    // ---------------------------
     function downloadMD(name, content) {
         const blob = new Blob([content], { type: 'text/markdown' });
         const url = window.URL.createObjectURL(blob);
+
         const a = document.createElement('a');
         a.href = url;
         a.download = `${name}.md`;
         a.click();
     }
-</script>
+
+    // ---------------------------
+    // INIT APP
+    // ---------------------------
+    loadSkills();
+
+    </script>
 </body>
 </html>
