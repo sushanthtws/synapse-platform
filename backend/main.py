@@ -1,7 +1,9 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import frontmatter
 import os
+
+API_SECRET = os.getenv("API_SECRET", "")
 
 from backend.refiner import refine_skill
 from backend.database import init_db, insert_skill, get_all_skills, DB_NAME
@@ -9,12 +11,30 @@ from backend.repo_writer import save_skill_to_repo
 
 app = FastAPI()
 
+# ---------------- API KEY GUARD ----------------
+@app.middleware("http")
+async def api_key_guard(request: Request, call_next):
+    # Allow health check without key
+    if request.url.path == "/":
+        return await call_next(request)
+    if API_SECRET:
+        key = request.headers.get("X-API-Key", "")
+        if key != API_SECRET:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(status_code=403, content={"error": "forbidden"})
+    return await call_next(request)
+
 # ---------------- CORS ----------------
+
+origins = [
+    "https://sushanthtws.github.io",  # GitHub Pages frontend
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_credentials=True,
 )
 
 # ---------------- INIT DB ----------------
