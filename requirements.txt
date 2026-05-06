@@ -1,5 +1,15 @@
 fastapi
-uvicorn
+uvicorn[standard]
 python-multipart
 python-frontmatter
 openai
+structlog
+starlette
+itsdangerous
+pydantic-settings
+sqlalchemy
+psycopg2-binary
+celery
+redis
+alembic
+google-cloud-storage

@@ -121,6 +121,7 @@ body {
     color: #666;
 }
 </style>
+<script src="config.js"></script>
 </head>
 
 <body>
@@ -156,8 +157,7 @@ body {
 
 <script>
 
-const API = "https://synapse-api-653354222629.us-central1.run.app";
-const API_SECRET = "synapse-secret-key-2026";  // must match API_SECRET env var on Cloud Run
+const API = CONFIG.API;
 
 let SKILLS = [];
 
@@ -171,7 +171,7 @@ function arr(x) {
 /* ---------------- LOAD ---------------- */
 async function load() {
     try {
-        const res = await fetch(`${API}/skills`, { headers: { "X-API-Key": API_SECRET } });
+        const res = await fetch(`${API}/api/v1/skills`);
         SKILLS = await res.json();
 
         console.log("Loaded skills:", SKILLS);
@@ -303,9 +303,8 @@ document.getElementById("fileInput")
     form.append("file", file);
 
     try {
-        const res = await fetch(`${API}/process-skill`,{
+        const res = await fetch(`${API}/api/v1/skills/upload`,{
             method:"POST",
-            headers: { "X-API-Key": API_SECRET },
             body:form
         });
 
