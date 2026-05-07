@@ -6,7 +6,6 @@ class AnalyticsResponse(BaseModel):
     total_skills: int
     domains: List[str]
     top_tools: List[str]
-    difficulty_breakdown: dict
 
 
 class ChatRequest(BaseModel):

@@ -23,10 +23,11 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = "postgresql://synapse:synapse_dev@localhost:5432/synapse"
-    base_skill_dir: str = "/tmp/skills"
+    base_skill_dir: str = "/Users/sushanths/synapse_github/data/skills_repo"
 
     # LLM
     groq_api_key: str = ""
+    openai_api_key: str = ""
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"

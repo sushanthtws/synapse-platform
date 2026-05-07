@@ -17,7 +17,6 @@ def process_skill_async(raw_skill: dict):
             summary=clean_skill.get("summary"),
             domain=clean_skill.get("domain"),
             usage=clean_skill.get("usage"),
-            difficulty=clean_skill.get("difficulty", "medium"),
             tags=json.dumps(clean_skill.get("tags", [])),
             tools=json.dumps(clean_skill.get("tools", [])),
             languages=json.dumps(clean_skill.get("languages", [])),

@@ -11,6 +11,5 @@ class SkillState(TypedDict):
     languages: List[str]
     tech_stack: List[str]
     key_points: List[str]
-    difficulty: Optional[str]
     repo_path: Optional[str]
     error: Optional[str]

@@ -112,7 +112,37 @@ body {
     font-size: 11px;
     padding: 4px 8px;
     border-radius: 12px;
-    background: #f0f6ff;
+    background: #f0f0f0;
+    color: #666;
+}
+.tag.anchor {
+    background: #0969da;
+    color: #fff;
+    font-weight: 600;
+}
+.cat-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 0 24px 12px;
+}
+.cat-pill {
+    cursor: pointer;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    background: #eef3f8;
+    border: 1px solid transparent;
+    user-select: none;
+}
+.cat-pill:hover { border-color: #0969da; }
+.cat-pill.active {
+    background: #0969da;
+    color: #fff;
+}
+.cat-pill .count {
+    opacity: 0.7;
+    margin-left: 4px;
 }
 
 .meta {
@@ -131,11 +161,32 @@ body {
     <div class="logo">⚡ Synapse</div>
 
     <input type="file" id="fileInput" style="display:none">
+    <input type="file" id="folderInput" webkitdirectory directory multiple style="display:none">
 
     <button class="upload-btn"
         onclick="document.getElementById('fileInput').click()">
-        + Upload Skill
+        + Upload File
     </button>
+    <button class="upload-btn"
+        style="margin-left:8px"
+        onclick="document.getElementById('folderInput').click()">
+        + Upload Folder
+    </button>
+</div>
+
+<!-- DETAIL MODAL -->
+<div id="modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:100; align-items:center; justify-content:center;">
+    <div style="background:#fff; max-width:760px; width:92%; max-height:85vh; overflow:auto; border-radius:8px; padding:24px; position:relative;">
+        <button id="modalClose" style="position:absolute; top:8px; right:12px; border:none; background:none; font-size:22px; cursor:pointer;">×</button>
+        <div id="modalBody"></div>
+    </div>
+</div>
+
+<!-- REVIEW WIZARD -->
+<div id="wizard" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:101; align-items:center; justify-content:center;">
+    <div style="background:#fff; max-width:680px; width:92%; max-height:88vh; overflow:auto; border-radius:8px; padding:24px;">
+        <div id="wizardBody"></div>
+    </div>
 </div>
 
 <!-- SEARCH -->
@@ -149,8 +200,10 @@ body {
     <select id="usageFilter"></select>
     <select id="techFilter"></select>
     <select id="langFilter"></select>
-    <select id="difficultyFilter"></select>
 </div>
+
+<!-- CATEGORY PILLS -->
+<div class="cat-row" id="catRow"></div>
 
 <!-- GRID -->
 <div class="grid" id="grid"></div>
@@ -160,11 +213,17 @@ body {
 const API = CONFIG.API;
 
 let SKILLS = [];
+let TAG_FREQ = {};        // tag -> count across all skills
+let ANCHOR_TAGS = new Set(); // tags appearing in >= 2 skills
+let CATEGORY_FILTER = null;  // currently-selected category pill (a tag), or null
 
 /* ---------------- SAFE ARRAY ---------------- */
 function arr(x) {
     if (!x) return [];
-    if (Array.isArray(x)) return x;
+    if (Array.isArray(x)) return x.flatMap(v => arr(v));
+    if (typeof x === "string") {
+        return x.split(",").map(s => s.trim()).filter(Boolean);
+    }
     return [x];
 }
 
@@ -176,50 +235,130 @@ async function load() {
 
         console.log("Loaded skills:", SKILLS);
 
+        computeTagStats();
+        buildCategoryPills();
         buildFilters();
-        render(SKILLS);
+        apply();
 
     } catch (err) {
         console.error("Load failed", err);
     }
 }
 
-/* ---------------- BUILD FILTERS ---------------- */
-function buildFilters() {
-    build("domainFilter","domain");
-    build("usageFilter","usage");
-    build("techFilter","tech");
-    build("langFilter","language");
-    build("difficultyFilter","difficulty");
+/* ---------------- TAG FREQUENCY (lightweight clustering) ---------------- */
+function skillTags(s) {
+    // Union of all tag-like fields, deduped, lowercased.
+    const all = [
+        ...arr(s.tags), ...arr(s.tools),
+        ...arr(s.tech_stack), ...arr(s.languages),
+        ...arr(s.domain), ...arr(s.usage),
+    ].filter(Boolean).map(t => String(t).toLowerCase().trim()).filter(Boolean);
+    return [...new Set(all)];
 }
 
-function build(id, field) {
+function computeTagStats() {
+    TAG_FREQ = {};
+    SKILLS.forEach(s => {
+        skillTags(s).forEach(t => { TAG_FREQ[t] = (TAG_FREQ[t] || 0) + 1; });
+    });
+    ANCHOR_TAGS = new Set(Object.keys(TAG_FREQ).filter(t => TAG_FREQ[t] >= 2));
+}
+
+// Generic / low-signal tags that shouldn't show up as top-level categories,
+// even if they appear across many skills. These are noise from a
+// user-problem-search standpoint (tool primitives, action verbs, etc.).
+const PILL_STOPWORDS = new Set([
+    // Claude Code / generic agent tool primitives
+    "read", "write", "edit", "glob", "grep", "bash", "ls", "fetch", "webfetch",
+    "task", "todo", "todowrite", "notebookedit", "agent",
+    // Generic action verbs
+    "implementation", "implement", "refactor", "refactoring", "review",
+    "create", "update", "delete", "build", "configure", "setup",
+    "analyze", "analysis", "documentation", "docs", "general", "utility",
+    // Difficulty-ish leftovers
+    "easy", "medium", "hard", "unknown",
+]);
+
+function isMeaningfulCategory(tag) {
+    if (!tag) return false;
+    if (PILL_STOPWORDS.has(tag)) return false;
+    // Drop very short tokens (rarely useful as a category)
+    if (tag.length < 3) return false;
+    return true;
+}
+
+function buildCategoryPills() {
+    const row = document.getElementById("catRow");
+    // Anchor tags filtered through the stopword guard, top by frequency,
+    // capped at 8 pills so the bar stays compact and meaningful.
+    const top = [...ANCHOR_TAGS]
+        .filter(isMeaningfulCategory)
+        .sort((a, b) => TAG_FREQ[b] - TAG_FREQ[a])
+        .slice(0, 8);
+    if (!top.length) {
+        row.innerHTML = '<div style="color:#888; font-size:12px">Upload more skills to see categories.</div>';
+        return;
+    }
+    row.innerHTML =
+        `<div class="cat-pill ${!CATEGORY_FILTER ? "active" : ""}" onclick="setCategory(null)">All <span class="count">${SKILLS.length}</span></div>` +
+        top.map(t => `
+            <div class="cat-pill ${CATEGORY_FILTER === t ? "active" : ""}" onclick="setCategory('${t.replace(/'/g, "\\'")}')">
+                ${t}<span class="count">${TAG_FREQ[t]}</span>
+            </div>
+        `).join("");
+}
+
+function setCategory(tag) {
+    CATEGORY_FILTER = (tag === CATEGORY_FILTER) ? null : tag;
+    buildCategoryPills();
+    apply();
+}
+
+/* ---------------- BUILD FILTERS ---------------- */
+function buildFilters() {
+    build("domainFilter","domain","Domain");
+    build("usageFilter","usage","Usage");
+    build("techFilter","tech_stack","Tech");
+    build("langFilter","languages","Language");
+}
+
+function build(id, field, label) {
     const el = document.getElementById(id);
     const values = new Set();
 
     SKILLS.forEach(s => {
-        arr(s[field]).forEach(v => values.add(v));
+        arr(s[field]).forEach(v => v && values.add(v));
     });
 
     el.innerHTML =
-        `<option value="">All ${field}</option>` +
-        [...values].map(v => `<option>${v}</option>`).join('');
+        `<option value="">All ${label || field}</option>` +
+        [...values].sort().map(v => `<option>${v}</option>`).join('');
 }
 
-/* ---------------- NLP SEARCH ---------------- */
+/* ---------------- KEYWORD SEARCH (tag-weighted) ---------------- */
 function score(skill, query) {
+    const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
+    if (!tokens.length) return 0;
 
-    let text = `
-        ${skill.title || ""}
-        ${skill.summary || ""}
-        ${arr(skill.domain).join(" ")}
-        ${arr(skill.usage).join(" ")}
-        ${arr(skill.tech).join(" ")}
-        ${arr(skill.language).join(" ")}
-    `.toLowerCase();
+    const tagText = [
+        ...arr(skill.tags), ...arr(skill.tools),
+        ...arr(skill.tech_stack), ...arr(skill.languages),
+        ...arr(skill.domain), ...arr(skill.usage),
+    ].join(" ").toLowerCase();
+    const titleText = (skill.title || "").toLowerCase();
+    const summaryText = (skill.summary || "").toLowerCase();
 
-    return query.split(" ").reduce((acc,q)=>
-        acc + (text.includes(q)?1:0),0);
+    // Weights: title hit = 4, tag/tool hit = 3, summary hit = 1
+    let total = 0;
+    for (const t of tokens) {
+        const re = new RegExp(`\\b${t.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}`, "i");
+        if (re.test(titleText)) total += 4;
+        else if (titleText.includes(t)) total += 2;
+        if (re.test(tagText)) total += 3;
+        else if (tagText.includes(t)) total += 1;
+        if (summaryText.includes(t)) total += 1;
+    }
+    return total;
 }
 
 /* ---------------- APPLY FILTER ---------------- */
@@ -233,19 +372,19 @@ function apply() {
     const usage = val("usageFilter");
     const tech = val("techFilter");
     const lang = val("langFilter");
-    const diff = val("difficultyFilter");
 
     filtered = filtered.filter(s =>
         (!domain || arr(s.domain).includes(domain)) &&
         (!usage || arr(s.usage).includes(usage)) &&
-        (!tech || arr(s.tech).includes(tech)) &&
-        (!lang || arr(s.language).includes(lang)) &&
-        (!diff || s.difficulty === diff)
+        (!tech || arr(s.tech_stack).includes(tech)) &&
+        (!lang || arr(s.languages).includes(lang)) &&
+        (!CATEGORY_FILTER || skillTags(s).includes(CATEGORY_FILTER))
     );
 
     if (q) {
         filtered = filtered
             .map(s => ({...s, _score: score(s,q)}))
+            .filter(s => s._score > 0)
             .sort((a,b)=>b._score-a._score);
     }
 
@@ -266,60 +405,304 @@ function render(list) {
         return;
     }
 
-    grid.innerHTML = list.map(s => `
-        <div class="card">
-
+    grid.innerHTML = list.map(s => {
+        const unique = skillTags(s);
+        // Anchor tags first (sorted by frequency), then unique singletons
+        unique.sort((a, b) => (TAG_FREQ[b] || 0) - (TAG_FREQ[a] || 0));
+        return `
+        <div class="card" onclick="openDetail(${s.id})" style="cursor:pointer">
             <div class="title">${s.title || "Untitled Skill"}</div>
-
             <div class="summary">${s.summary || ""}</div>
-
-            <div class="tags">
-                ${arr(s.domain).map(tag).join("")}
-                ${arr(s.usage).map(tag).join("")}
-                ${arr(s.tech).map(tag).join("")}
-                ${arr(s.language).map(tag).join("")}
-            </div>
-
-            <div class="meta">
-                Difficulty: ${s.difficulty || "medium"}
-            </div>
-
-        </div>
-    `).join('');
+            <div class="tags">${unique.map(tag).join("")}</div>
+            ${s.is_complete ? '<div class="meta" style="color:#1a7f37">✓ Complete</div>' : '<div class="meta" style="color:#9a6700">Draft</div>'}
+        </div>`;
+    }).join('');
 }
 
 function tag(t){
-    return `<span class="tag">${t}</span>`;
+    const lower = String(t).toLowerCase();
+    const isMeaningfulAnchor = ANCHOR_TAGS.has(lower) && isMeaningfulCategory(lower);
+    return `<span class="${isMeaningfulAnchor ? "tag anchor" : "tag"}">${t}</span>`;
 }
 
 /* ---------------- UPLOAD ---------------- */
-document.getElementById("fileInput")
-.addEventListener("change", async (e)=>{
-
-    const file = e.target.files[0];
-    if(!file) return;
-
+async function uploadFiles(fileList) {
+    if (!fileList || !fileList.length) return;
     const form = new FormData();
-    form.append("file", file);
-
+    for (const f of fileList) {
+        form.append("files", f);
+        // For folder uploads the browser sets webkitRelativePath
+        form.append("relative_paths", f.webkitRelativePath || f.name);
+    }
     try {
-        const res = await fetch(`${API}/api/v1/skills/upload`,{
-            method:"POST",
-            body:form
-        });
-
+        const res = await fetch(`${API}/api/v1/skills/upload`, { method: "POST", body: form });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            alert("Upload failed: " + (err.detail || res.status));
+            return;
+        }
         const skill = await res.json();
-
-        console.log("Uploaded skill:", skill);
-
-        // safest: reload from backend
         await load();
-
+        if (skill.needs_completion_confirmation && skill.id) {
+            startWizard(skill);
+        }
     } catch (err) {
         console.error("Upload failed", err);
         alert("Upload failed");
     }
-});
+}
+
+document.getElementById("fileInput")
+    .addEventListener("change", e => uploadFiles(e.target.files));
+document.getElementById("folderInput")
+    .addEventListener("change", e => uploadFiles(e.target.files));
+
+/* ---------------- REVIEW WIZARD ---------------- */
+let WIZ = null; // { skill, step, isInUse, usedAt }
+
+function showWizard() { document.getElementById("wizard").style.display = "flex"; }
+function hideWizard() { document.getElementById("wizard").style.display = "none"; WIZ = null; }
+
+function startWizard(skill) {
+    WIZ = { skill: { ...skill }, step: "review", isInUse: false, usedAt: "" };
+    showWizard();
+    renderWizard();
+}
+
+function renderWizard() {
+    const body = document.getElementById("wizardBody");
+    if (!WIZ) return;
+    if (WIZ.step === "review")  body.innerHTML = wizardReviewHTML();
+    if (WIZ.step === "fix")     body.innerHTML = wizardFixHTML();
+    if (WIZ.step === "usage")   body.innerHTML = wizardUsageHTML();
+    if (WIZ.step === "confirm") body.innerHTML = wizardConfirmHTML();
+}
+
+function esc(s) { return (s == null ? "" : String(s)).replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+function wizardReviewHTML() {
+    const s = WIZ.skill;
+    const tags = [
+        ...arr(s.tags), ...arr(s.tools),
+        ...arr(s.tech_stack), ...arr(s.languages),
+    ];
+    const how = (s.how_to_use || "").split(" | ").filter(Boolean);
+    return `
+        <h3 style="margin-top:0">Step 1 of 3 — Review what we picked up</h3>
+        <p style="color:#666; font-size:13px">Confirm the agent's understanding of this skill before we add it to the repository.</p>
+        <table style="width:100%; font-size:14px">
+            <tr><td style="width:140px; color:#666; vertical-align:top; padding:6px 0">Title</td><td><b>${esc(s.title)}</b></td></tr>
+            <tr><td style="color:#666; vertical-align:top; padding:6px 0">Description</td><td>${esc(s.summary)}</td></tr>
+            <tr><td style="color:#666; vertical-align:top; padding:6px 0">Where to use</td><td>${esc(s.where_to_use) || "<i>—</i>"}</td></tr>
+            <tr><td style="color:#666; vertical-align:top; padding:6px 0">Why to use</td><td>${esc(s.why_to_use) || "<i>—</i>"}</td></tr>
+            <tr><td style="color:#666; vertical-align:top; padding:6px 0">How to use</td>
+                <td>${how.length ? `<ol style="margin:0; padding-left:18px">${how.map(h => `<li>${esc(h)}</li>`).join("")}</ol>` : "<i>—</i>"}</td></tr>
+            <tr><td style="color:#666; vertical-align:top; padding:6px 0">Tags</td><td>${tags.map(tag).join("") || "<i>—</i>"}</td></tr>
+        </table>
+        <div style="text-align:right; margin-top:20px;">
+            <button onclick="wizGoFix()" style="margin-right:8px">Needs fixes</button>
+            <button class="upload-btn" onclick="wizGoUsage()">Looks good →</button>
+        </div>
+        <div style="text-align:right; margin-top:8px"><button style="border:none;background:none;color:#888;cursor:pointer" onclick="wizCancel()">Save as draft & exit</button></div>
+    `;
+}
+
+function wizardFixHTML() {
+    const s = WIZ.skill;
+    const tagsCsv = [...arr(s.tags), ...arr(s.tools)].join(", ");
+    const techCsv = arr(s.tech_stack).join(", ");
+    const langCsv = arr(s.languages).join(", ");
+    return `
+        <h3 style="margin-top:0">Fix the details</h3>
+        <p style="color:#666; font-size:13px">Edit anything that's wrong. Fields you don't change stay as-is.</p>
+        <div style="display:grid; gap:10px">
+            <label>Title<br><input id="fxTitle" style="width:100%; padding:6px" value="${esc(s.title)}"></label>
+            <label>Description (summary)<br><textarea id="fxSummary" rows="2" style="width:100%; padding:6px">${esc(s.summary)}</textarea></label>
+            <label>Where to use<br><textarea id="fxWhere" rows="2" style="width:100%; padding:6px">${esc(s.where_to_use)}</textarea></label>
+            <label>Why to use<br><textarea id="fxWhy" rows="2" style="width:100%; padding:6px">${esc(s.why_to_use)}</textarea></label>
+            <label>How to use (separate steps with <code> | </code>)<br><textarea id="fxHow" rows="2" style="width:100%; padding:6px">${esc(s.how_to_use)}</textarea></label>
+            <label>Tags / tools (comma-separated)<br><input id="fxTags" style="width:100%; padding:6px" value="${esc(tagsCsv)}"></label>
+            <label>Tech stack (comma-separated)<br><input id="fxTech" style="width:100%; padding:6px" value="${esc(techCsv)}"></label>
+            <label>Languages (comma-separated)<br><input id="fxLang" style="width:100%; padding:6px" value="${esc(langCsv)}"></label>
+        </div>
+        <div style="text-align:right; margin-top:16px">
+            <button onclick="wizBack('review')" style="margin-right:8px">← Back</button>
+            <button class="upload-btn" onclick="wizSaveFix()">Save & re-review</button>
+        </div>
+    `;
+}
+
+function wizardUsageHTML() {
+    const yes = WIZ.isInUse;
+    return `
+        <h3 style="margin-top:0">Step 2 of 3 — Is this skill currently in use?</h3>
+        <p style="color:#666; font-size:13px">Helps other users find skills that are battle-tested in real workflows.</p>
+        <div style="margin:8px 0">
+            <label style="margin-right:16px"><input type="radio" name="inuse" ${!yes ? "checked" : ""} onchange="wizSetInUse(false)"> No, not currently used</label>
+            <label><input type="radio" name="inuse" ${yes ? "checked" : ""} onchange="wizSetInUse(true)"> Yes, in use</label>
+        </div>
+        <div id="usageDetail" style="display:${yes ? "block" : "none"}; margin-top:8px">
+            <label>Where is it used?<br>
+                <select id="usedAtSel" onchange="wizPickPlatform()" style="padding:6px; width:260px">
+                    <option value="">— select —</option>
+                    <option ${WIZ.usedAt === "Anthropic Claude Code" ? "selected" : ""}>Anthropic Claude Code</option>
+                    <option ${WIZ.usedAt === "Claude.ai" ? "selected" : ""}>Claude.ai</option>
+                    <option ${WIZ.usedAt === "Cursor" ? "selected" : ""}>Cursor</option>
+                    <option ${WIZ.usedAt === "Windsurf" ? "selected" : ""}>Windsurf</option>
+                    <option value="__other__">Other…</option>
+                </select>
+            </label>
+            <div id="usedAtOtherWrap" style="display:none; margin-top:8px">
+                <input id="usedAtOther" placeholder="Platform / project name" style="padding:6px; width:280px">
+            </div>
+        </div>
+        <div style="text-align:right; margin-top:20px">
+            <button onclick="wizBack('review')" style="margin-right:8px">← Back</button>
+            <button class="upload-btn" onclick="wizGoConfirm()">Next →</button>
+        </div>
+    `;
+}
+
+function wizardConfirmHTML() {
+    const s = WIZ.skill;
+    return `
+        <h3 style="margin-top:0">Step 3 of 3 — Upload to repository?</h3>
+        <p style="color:#666; font-size:13px">Once uploaded, this skill is locked. Re-uploading the same slug will be rejected. New skills must use a new unique title.</p>
+        <div style="background:#f6f8fa; padding:12px; border-radius:6px; font-size:13px">
+            <div><b>${esc(s.title)}</b></div>
+            <div style="color:#666; margin-top:4px">${esc(s.summary)}</div>
+            <div style="margin-top:8px; color:#444">
+                ${WIZ.isInUse ? `In use at: <b>${esc(WIZ.usedAt) || "(not specified)"}</b>` : "Not currently in use"}
+            </div>
+        </div>
+        <div style="text-align:right; margin-top:20px">
+            <button onclick="wizBack('usage')" style="margin-right:8px">← Back</button>
+            <button class="upload-btn" onclick="wizFinalize()">✓ Upload to repository</button>
+        </div>
+    `;
+}
+
+/* Wizard transitions */
+function wizGoFix()   { WIZ.step = "fix"; renderWizard(); }
+function wizGoUsage() { WIZ.step = "usage"; renderWizard(); }
+function wizGoConfirm() {
+    // Capture usage selections from DOM before moving on
+    const sel = document.getElementById("usedAtSel");
+    const other = document.getElementById("usedAtOther");
+    if (WIZ.isInUse) {
+        if (sel && sel.value === "__other__") WIZ.usedAt = (other && other.value || "").trim();
+        else if (sel) WIZ.usedAt = sel.value;
+    } else {
+        WIZ.usedAt = "";
+    }
+    WIZ.step = "confirm"; renderWizard();
+}
+function wizBack(step) { WIZ.step = step; renderWizard(); }
+function wizCancel()   { hideWizard(); load(); }
+function wizSetInUse(v) {
+    WIZ.isInUse = v;
+    document.getElementById("usageDetail").style.display = v ? "block" : "none";
+}
+function wizPickPlatform() {
+    const sel = document.getElementById("usedAtSel");
+    document.getElementById("usedAtOtherWrap").style.display = (sel.value === "__other__") ? "block" : "none";
+}
+
+/* Save edits → PATCH /skills/{id} → reload that skill into wizard */
+async function wizSaveFix() {
+    const csv = (id) => (document.getElementById(id).value || "")
+        .split(",").map(s => s.trim()).filter(Boolean);
+    const payload = {
+        title: document.getElementById("fxTitle").value.trim(),
+        summary: document.getElementById("fxSummary").value.trim(),
+        where_to_use: document.getElementById("fxWhere").value.trim(),
+        why_to_use: document.getElementById("fxWhy").value.trim(),
+        how_to_use: document.getElementById("fxHow").value.trim(),
+        tags: csv("fxTags"),
+        tech_stack: csv("fxTech"),
+        languages: csv("fxLang"),
+    };
+    const id = WIZ.skill.id;
+    const res = await fetch(`${API}/api/v1/skills/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert("Save failed: " + (err.detail || res.status));
+        return;
+    }
+    // Merge edits locally and go back to review
+    Object.assign(WIZ.skill, payload);
+    WIZ.step = "review";
+    renderWizard();
+}
+
+/* Final upload to repository = PATCH /complete with usage info */
+async function wizFinalize() {
+    const id = WIZ.skill.id;
+    const res = await fetch(`${API}/api/v1/skills/${id}/complete`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_in_use: WIZ.isInUse, used_at: WIZ.usedAt }),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert("Upload failed: " + (err.detail || res.status));
+        return;
+    }
+    hideWizard();
+    await load();
+}
+
+/* ---------------- DETAIL MODAL ---------------- */
+async function openDetail(id) {
+    const skill = SKILLS.find(s => s.id === id);
+    if (!skill) return;
+    const filesRes = await fetch(`${API}/api/v1/skills/${id}/files`);
+    const files = filesRes.ok ? await filesRes.json() : [];
+    const allTags = [...new Set([
+        ...arr(skill.tags), ...arr(skill.tools),
+        ...arr(skill.tech_stack), ...arr(skill.languages),
+        ...arr(skill.domain), ...arr(skill.usage),
+    ].filter(Boolean))];
+    const kp = arr(skill.key_points);
+    document.getElementById("modalBody").innerHTML = `
+        <h2 style="margin-top:0">${skill.title}</h2>
+        <p style="color:#555">${skill.summary || ""}</p>
+        <div style="margin:8px 0">${allTags.map(tag).join("")}</div>
+        ${kp.length ? `<h4>Key points</h4><ul>${kp.map(p => `<li>${p}</li>`).join("")}</ul>` : ""}
+        <h4>Files (${files.length})</h4>
+        <table style="width:100%; font-size:13px; border-collapse:collapse">
+            <thead><tr style="text-align:left; border-bottom:1px solid #ddd"><th>Path</th><th>Type</th><th>Role</th><th>Size</th></tr></thead>
+            <tbody>
+                ${files.map(f => `<tr style="border-bottom:1px solid #f0f0f0">
+                    <td><a href="${API}/api/v1/skills/${id}/file?path=${encodeURIComponent(f.path)}" target="_blank">${f.path}</a></td>
+                    <td><code>${f.type}</code></td>
+                    <td>${f.role || ""}</td>
+                    <td>${f.size}</td>
+                </tr>`).join("")}
+            </tbody>
+        </table>
+        <div style="margin-top:16px">
+            <a class="upload-btn" href="${API}/api/v1/skills/${id}/download">⬇ Download ZIP</a>
+            ${!skill.is_complete ? `<button style="margin-left:8px" onclick="markComplete(${id})">Mark complete</button>` : '<span style="margin-left:8px; color:#1a7f37">✓ Complete</span>'}
+        </div>
+    `;
+    document.getElementById("modal").style.display = "flex";
+}
+async function markComplete(id) {
+    await fetch(`${API}/api/v1/skills/${id}/complete`, { method: "PATCH" });
+    document.getElementById("modal").style.display = "none";
+    await load();
+}
+document.getElementById("modalClose").onclick = () =>
+    document.getElementById("modal").style.display = "none";
+document.getElementById("modal").onclick = (e) => {
+    if (e.target.id === "modal") document.getElementById("modal").style.display = "none";
+};
 
 /* ---------------- EVENTS ---------------- */
 document.querySelectorAll("select")
